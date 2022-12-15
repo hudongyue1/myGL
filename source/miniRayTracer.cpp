@@ -69,7 +69,7 @@ public:
 };
 
 bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, float &x1) {
-
+    return false;
 }
 
 /**
@@ -194,6 +194,59 @@ public:
     }
 };
 
+class Plane : public Object {
+private:
+    Vec3f normal;
+public:
+    Plane(const Vec3f &N) : normal(N) {}
+
+    bool intersect(const Vec3f &orig, const Vec3f &dir, float &t) const {
+        if(abs(dir.dotProduct(normal)) < kEpsilon) return false;
+        return true;
+    }
+
+    void getSurfaceData(const Vec3f &Phit, Vec3f &Nhit, Vec2f &tex) const {
+        Nhit = normal;
+        tex.x = (1 + atan2(Nhit.z, Nhit.x) / M_PI) * 0.5;
+        tex.y = acosf(Nhit.y) / M_PI;
+    }
+};
+
+class Disk : public Object {
+private:
+    Vec3f normal;
+    Vec3f center;
+    float radius, radius2;
+public:
+    Disk(const Vec3f &N, const Vec3f &c, const float &r) : normal(N), center(c), radius(r), radius2(r*r) {}
+
+    bool intersect(const Vec3f &orig, const Vec3f &dir, float &t) const {
+        float normalDotRayDirection = normal.dotProduct(dir);
+        if(abs(normalDotRayDirection) < kEpsilon) return false;
+
+        // compute the t
+        float D = -(normal.dotProduct(center));
+        t = -(normal.dotProduct(orig) + D) / normalDotRayDirection;
+
+        Vec3f Phit = orig + t*dir;
+        Vec3f pc = center - Phit;
+
+        if(pc.dotProduct(pc) > radius2) return false;
+        return true;
+    }
+
+    void getSurfaceData(const Vec3f &Phit, Vec3f &Nhit, Vec2f &tex) const {
+        Nhit = normal;
+        tex.x = (1 + atan2(Nhit.z, Nhit.x) / M_PI) * 0.5;
+        tex.y = acosf(Nhit.y) / M_PI;
+    }
+};
+
+class Box : public Object {
+private:
+
+public:
+};
 
 /**
  * Test each object for intersection
@@ -298,6 +351,11 @@ int main(int argc, char **argv) {
     Vec3f v1(0.5 * 10, (0.5 - dis(gen)) * 10, (0.5 + dis(gen) * 10));
     Vec3f v2((0.5 - dis(gen)) * 10, 0.5 * 10, (0.5 + dis(gen) * 10));
     objects.push_back(std::unique_ptr<Object>(new Triangle(v0, v1, v2)));
+
+    Vec3f normal(0.2, 0.5 * 10, (0.5 + dis(gen) * 10));
+    Vec3f center(0.2, 0.5 * 8, (0.5 + dis(gen) * 10));
+    float radius = 0.1;
+    objects.push_back(std::unique_ptr<Object>(new Disk(normal, center, radius)));
 
     // setting up options
     Options options;
