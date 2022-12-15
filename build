@@ -1,0 +1,1 @@
+c++ -o ./run/miniRayTracer ./source/miniRayTracer.cpp -O3 -std=c++11
