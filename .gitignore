@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+
+# output directory
+./out
+./run
