@@ -32,5 +32,6 @@
 *.app
 
 # output directory
-./out
-./run
+/out
+/run
+/.idea
