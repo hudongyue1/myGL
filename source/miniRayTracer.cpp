@@ -15,6 +15,10 @@
 
 # include "geometry.h"
 
+#if !defined METHOD_GEOMETRY || !defined CULLING
+//#define METHOD_GEOMETRY
+//#define CULLING
+
 /*
  *
  */
@@ -69,11 +73,24 @@ public:
 };
 
 bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, float &x1) {
-    return false;
+    int delta = b * b - 4 * a * c;
+    if(delta < 0) return false;
+    else if(delta == 0) { x0 = x1 = -0.5 * b / a; }
+    else {
+        float q = (b > 0) ?
+                -0.5 * (b + sqrt(delta)) :
+                -0.5 * (b - sqrt(delta));
+        x0 = q / a;
+        x1 = c / q;
+    }
+    return true;
 }
 
 /**
  *  support classes : Sphere, Triangle, Plane, Disk, Box
+ *
+ *  todo list: World-to-Object Matrix in Ray-Tracing
+
  */
 class Sphere : public Object {
 private:
@@ -84,8 +101,7 @@ public:
 
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &t) const {
         float t0, t1;
-
-        // geometric solution
+#ifdef METHOD_GEOMETRY // geometric solution
         Vec3f  L = center - orig;
         float tca = L.dotProduct(dir);
         if(tca < 0) return false;
@@ -94,7 +110,13 @@ public:
         float thc = sqrt(radius2 - d2);
         t0 = tca - thc;
         t1 = tca + thc;
-
+#else // analytic solution
+        Vec3f L = orig - center;
+        float a = dir.dotProduct(dir);
+        float b = 2 * dir.dotProduct(L);
+        float c = L.dotProduct(L) - radius2;
+        if(!solveQuadratic(a, b, c, t0, t1)) return false;
+#endif
         if(t0 > t1) std::swap(t0, t1);
 
         if(t0 < 0) {
@@ -128,9 +150,12 @@ public:
     }
 
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &t) const {
-        // geometry solution
+        float u, v;
+#ifdef METHOD_GEOMETRY // geometry solution
         Vec3f v0v1 = vertex1 - vertex0;
         Vec3f v0v2 = vertex2 - vertex0;
+
+        float denom = normal.dotProduct(normal);
 
         // exclude parallel
         float normalDotRayDirection = normal.dotProduct(dir);
@@ -151,40 +176,55 @@ public:
         Vec3f v1P = Phit - vertex1;
         Vec3f v2P = Phit - vertex2;
 
-        // judge inside or not
+        // judge hit point inside triangle or not
         Vec3f J;
         J = v0v1.crossProduct(v0P);
         if(normal.dotProduct(J) < 0) return false;
 
         Vec3f v1v2 = vertex2 - vertex1;
         J = v1v2.crossProduct(v1P);
-        if(normal.dotProduct(J) < 0) return false;
+        if((u = normal.dotProduct(J))< 0) return false;
 
         Vec3f v2v0 = vertex0 - vertex2;
         J = (-v0v2).crossProduct(v2P);
-        if(normal.dotProduct(J) < 0) return false;
-        // Step 2: inside-outside test
-//        Vec3f C;  //vector perpendicular to triangle's plane
-//
-//        // edge 0
-//        Vec3f edge0 = vertex1 - vertex0;
-//        Vec3f vp0 = Phit - vertex0;
-//        C = edge0.crossProduct(vp0);
-//        if (normal.dotProduct(C) < 0) return false;  //P is on the right side
-//
-//        // edge 1
-//        Vec3f edge1 = vertex2 - vertex1;
-//        Vec3f vp1 = Phit - vertex1;
-//        C = edge1.crossProduct(vp1);
-//        if (normal.dotProduct(C) < 0)  return false;  //P is on the right side
-//
-//        // edge 2
-//        Vec3f edge2 = vertex0 - vertex2;
-//        Vec3f vp2 = Phit - vertex2;
-//        C = edge2.crossProduct(vp2);
-//        if (normal.dotProduct(C) < 0) return false;  //P is on the right side;
+        if((v = normal.dotProduct(J)) < 0) return false;
+
+        u /= denom;
+        v /= denom;
 
         return true;
+
+#else // MOLLER_TRUMBORE
+        Vec3f v0v1 = vertex1 - vertex0;
+        Vec3f v0v2 = vertex2 - vertex0;
+        // v0v1 ✖️ v0v2 -> normal
+        // v0v2 ✖️ v0v1 -> -normal
+        // dir . (v0v1 ✖️ v0v2) = -dir . (v0v2 ✖️ v0v1) = -(dir ✖️ v0v2) . v0v1
+        // P = (dir ✖️ v0v2)
+        Vec3f P = dir.crossProduct(v0v2);
+
+        float det = v0v1.dotProduct(P);
+#ifdef CULLING //  det < 0 should be culled
+        if(det < kEpsilon) return false;
+#else
+        if(abs(det) < kEpsilon) return false;
+#endif
+        Vec3f T = orig - vertex0;
+
+        float inverseDet = 1 / det;
+
+        u = inverseDet * P.dotProduct(T);
+        if(u < 0) return false;
+
+        Vec3f Q = T.crossProduct(v0v1);
+
+        v = inverseDet * Q.dotProduct(dir);
+        if(v < 0 || u+v > 1) return false;
+
+        t = inverseDet * Q.dotProduct(v0v2);
+
+        return true;
+#endif
     }
 
     void getSurfaceData(const Vec3f &Phit, Vec3f &Nhit, Vec2f &tex) const {
@@ -193,6 +233,7 @@ public:
         tex.y = acosf(Nhit.y) / M_PI;
     }
 };
+
 
 class Plane : public Object {
 private:
@@ -201,7 +242,12 @@ public:
     Plane(const Vec3f &N) : normal(N) {}
 
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &t) const {
-        if(abs(dir.dotProduct(normal)) < kEpsilon) return false;
+        float det = dir.dotProduct(normal);
+#ifdef CULLING
+        if(det < kEpsilon) return false;
+#else
+        if(abs(det) < kEpsilon) return false;
+#endif
         return true;
     }
 
@@ -211,6 +257,7 @@ public:
         tex.y = acosf(Nhit.y) / M_PI;
     }
 };
+
 
 class Disk : public Object {
 private:
@@ -221,12 +268,15 @@ public:
     Disk(const Vec3f &N, const Vec3f &c, const float &r) : normal(N), center(c), radius(r), radius2(r*r) {}
 
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &t) const {
-        float normalDotRayDirection = normal.dotProduct(dir);
-        if(abs(normalDotRayDirection) < kEpsilon) return false;
-
+        float det = dir.dotProduct(normal);
+#ifdef CULLING
+        if(det < kEpsilon) return false;
+#else
+        if(abs(det) < kEpsilon) return false;
+#endif
         // compute the t
         float D = -(normal.dotProduct(center));
-        t = -(normal.dotProduct(orig) + D) / normalDotRayDirection;
+        t = -(normal.dotProduct(orig) + D) / det;
 
         Vec3f Phit = orig + t*dir;
         Vec3f pc = center - Phit;
@@ -242,11 +292,14 @@ public:
     }
 };
 
+
 class Box : public Object {
 private:
 
 public:
+
 };
+
 
 /**
  * Test each object for intersection
@@ -342,19 +395,26 @@ int main(int argc, char **argv) {
 
     uint32_t numSpheres = 3;
     gen.seed(0);
-//    for (uint32_t i = 0; i < numSpheres; ++i) {
-//        Vec3f randPos((0.5 - dis(gen)) * 10, (0.5 - dis(gen)) * 10, (0.5 + dis(gen) * 10));
-//        float randRadius = (0.5 + dis(gen) * 0.5);
-//        objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius)));
-//    }
-    Vec3f v0((0.5 - dis(gen)) * 10, (0.5 - dis(gen)) * 10, (0.5 + dis(gen) * 10));
-    Vec3f v1(0.5 * 10, (0.5 - dis(gen)) * 10, (0.5 + dis(gen) * 10));
-    Vec3f v2((0.5 - dis(gen)) * 10, 0.5 * 10, (0.5 + dis(gen) * 10));
+
+    // sphere
+    for (uint32_t i = 0; i < numSpheres; ++i) {
+        Vec3f randPos((0.5 - dis(gen)) * 10, (0.5 - dis(gen)) * 10, (0.5 + dis(gen) * 10));
+        float randRadius = (0.5 + dis(gen) * 0.5);
+        objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius)));
+    }
+
+    // triangle
+    Vec3f v0((0.5 - dis(gen)) * 10, (0.5 - dis(gen)) * 10, (1 + dis(gen) * 10));
+    Vec3f v1(0.5 * 10, (0.5 - dis(gen)) * 10, (2 + dis(gen) * 10));
+    Vec3f v2((0.5 - dis(gen)) * 10, 0.5 * 10, (3 + dis(gen) * 10));
     objects.push_back(std::unique_ptr<Object>(new Triangle(v0, v1, v2)));
 
-    Vec3f normal(0.2, 0.5 * 10, (0.5 + dis(gen) * 10));
-    Vec3f center(0.2, 0.5 * 8, (0.5 + dis(gen) * 10));
-    float radius = 0.1;
+    // disk
+    Vec3f normal(0.2, 0.5 * 10, (0.4 + dis(gen) * 10));
+    Vec3f center(0.2, 0.5 * 8, 0.1 );
+    float radius = 2;
+
+
     objects.push_back(std::unique_ptr<Object>(new Disk(normal, center, radius)));
 
     // setting up options
@@ -368,3 +428,5 @@ int main(int argc, char **argv) {
 
     return 0;
 }
+
+#endif
