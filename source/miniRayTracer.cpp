@@ -23,9 +23,11 @@
  *
  */
 // get the max float as infinity
-const float kInfinity = std::numeric_limits<float>::max();
+static const float kInfinity = std::numeric_limits<float>::max();
 
-constexpr float kEpsilon = 1e-8;
+static constexpr float kEpsilon = 1e-8;
+
+static const Vec3f kDefaultBackgroundColor = Vec3f(0.2, 0.7, 0.8);
 
 // get random
 std::random_device rd;
@@ -54,9 +56,24 @@ Vec3f mix(const Vec3f &a, const Vec3f& b, const float &mixValue){
 struct Options {
     uint32_t width;
     uint32_t height;
+    Vec3f backgroundColor;
     float fov;
     Matrix44f cameraToWorld;
 };
+
+bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, float &x1) {
+    int delta = b * b - 4 * a * c;
+    if(delta < 0) return false;
+    else if(delta == 0) { x0 = x1 = -0.5 * b / a; }
+    else {
+        float q = (b > 0) ?
+                  -0.5 * (b + sqrt(delta)) :
+                  -0.5 * (b - sqrt(delta));
+        x0 = q / a;
+        x1 = c / q;
+    }
+    return true;
+}
 
 // the virtual class for supported object
 class Object {
@@ -71,20 +88,6 @@ public:
     virtual void getSurfaceData(const Vec3f &, Vec3f &, Vec2f &) const = 0;
     Vec3f color;
 };
-
-bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, float &x1) {
-    int delta = b * b - 4 * a * c;
-    if(delta < 0) return false;
-    else if(delta == 0) { x0 = x1 = -0.5 * b / a; }
-    else {
-        float q = (b > 0) ?
-                -0.5 * (b + sqrt(delta)) :
-                -0.5 * (b - sqrt(delta));
-        x0 = q / a;
-        x1 = c / q;
-    }
-    return true;
-}
 
 /**
  *  support classes : Sphere, Triangle, Plane, Disk, Box
@@ -410,17 +413,23 @@ int main(int argc, char **argv) {
     objects.push_back(std::unique_ptr<Object>(new Triangle(v0, v1, v2)));
 
     // disk
-    Vec3f normal(0.2, 0.5 * 10, (0.4 + dis(gen) * 10));
-    Vec3f center(0.2, 0.5 * 8, 0.1 );
-    float radius = 2;
+    Vec3f normal1(0.2, 0.5 * 10, (1 + dis(gen) * 10));
+    Vec3f center1(0.2, 0.5 * 8, 0.1 );
+    float radius1 = 2;
+    objects.push_back(std::unique_ptr<Object>(new Disk(normal1, center1, radius1)));
 
-
-    objects.push_back(std::unique_ptr<Object>(new Disk(normal, center, radius)));
+    Vec3f normal2(0.2, 0.5 * 10, 0);
+    Vec3f center2(0, 0.5 * 8, 0.1 );
+    float radius2 = 2;
+    objects.push_back(std::unique_ptr<Object>(new Disk(normal2, center2, radius2)));
 
     // setting up options
     Options options;
     options.width = 640;
     options.height = 480;
+    options.backgroundColor = kDefaultBackgroundColor;
+//    options.width = 2560;
+//    options.height = 1600;
     options.fov = 51.52;
     options.cameraToWorld = Matrix44f(0.945519, 0, -0.325569, 0, -0.179534, 0.834209, -0.521403, 0, 0.271593, 0.551447, 0.78876, 0, 4.208271, 8.374532, 17.932925, 1);
 
