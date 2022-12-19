@@ -75,6 +75,8 @@ bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, f
     return true;
 }
 
+//intersect(const Vec3f &orig, const Vec3f &dir, float &tNear, uint32_t &triIndex, Vec2f &uv)
+
 // the virtual class for supported object
 class Object {
 public:
@@ -82,10 +84,10 @@ public:
     virtual ~Object() {}
 
     // weather intersect and the distance of hit point
-    virtual bool intersect(const Vec3f &, const Vec3f &, float &) const = 0;
+    virtual bool intersect(const Vec3f &, const Vec3f &, float &, uint32_t &, Vec2f &) const = 0;
 
     // get the surface date for texture in the hit point
-    virtual void getSurfaceData(const Vec3f &, Vec3f &, Vec2f &) const = 0;
+    virtual void getSurfaceData(const Vec3f &, const Vec3f &, const uint32_t &, const Vec2f &, Vec3f &, Vec2f &) const = 0;
     Vec3f color;
 };
 
@@ -102,7 +104,8 @@ private:
 public:
     Sphere(const Vec3f &c, const float &r) : center(c), radius(r), radius2(r*r) {}
 
-    bool intersect(const Vec3f &orig, const Vec3f &dir, float &t) const {
+    bool intersect(const Vec3f &orig, const Vec3f &dir, float &t, uint32_t &index, Vec2f &uv) const {
+        uv = 0;
         float t0, t1;
 #ifdef METHOD_GEOMETRY // geometric solution
         Vec3f  L = center - orig;
@@ -132,7 +135,7 @@ public:
         return true;
     }
 
-    void getSurfaceData(const Vec3f &Phit, Vec3f &Nhit, Vec2f &tex) const {
+    void getSurfaceData(const Vec3f &Phit, const Vec3f &dir, const uint32_t &index, const Vec2f &uv, Vec3f &Nhit, Vec2f &tex) const {
         Nhit = Phit - center;
         Nhit.normalize();
         tex.x = (1 + atan2(Nhit.z, Nhit.x) / M_PI) * 0.5;
@@ -152,7 +155,7 @@ public:
         normal.normalize();
     }
 
-    bool intersect(const Vec3f &orig, const Vec3f &dir, float &t) const {
+    bool intersect(const Vec3f &orig, const Vec3f &dir, float &t, uint32_t &index, Vec2f &uv) const {
         float u, v;
 #ifdef METHOD_GEOMETRY // geometry solution
         Vec3f v0v1 = vertex1 - vertex0;
@@ -195,6 +198,9 @@ public:
         u /= denom;
         v /= denom;
 
+        uv.x = u;
+        uv.y = v;
+
         return true;
 
 #else // MOLLER_TRUMBORE
@@ -230,7 +236,7 @@ public:
 #endif
     }
 
-    void getSurfaceData(const Vec3f &Phit, Vec3f &Nhit, Vec2f &tex) const {
+    void getSurfaceData(const Vec3f &Phit, const Vec3f &dir, const uint32_t &index, const Vec2f &uv, Vec3f &Nhit, Vec2f &tex) const {
         Nhit = normal;
         tex.x = (1 + atan2(Nhit.z, Nhit.x) / M_PI) * 0.5;
         tex.y = acosf(Nhit.y) / M_PI;
@@ -244,7 +250,8 @@ private:
 public:
     Plane(const Vec3f &N) : normal(N) {}
 
-    bool intersect(const Vec3f &orig, const Vec3f &dir, float &t) const {
+    bool intersect(const Vec3f &orig, const Vec3f &dir, float &t, uint32_t &index, Vec2f &uv) const {
+        uv = 0;
         float det = dir.dotProduct(normal);
 #ifdef CULLING
         if(det < kEpsilon) return false;
@@ -254,7 +261,7 @@ public:
         return true;
     }
 
-    void getSurfaceData(const Vec3f &Phit, Vec3f &Nhit, Vec2f &tex) const {
+    void getSurfaceData(const Vec3f &Phit, const Vec3f &dir, const uint32_t &index, const Vec2f &uv, Vec3f &Nhit, Vec2f &tex) const {
         Nhit = normal;
         tex.x = (1 + atan2(Nhit.z, Nhit.x) / M_PI) * 0.5;
         tex.y = acosf(Nhit.y) / M_PI;
@@ -270,7 +277,8 @@ private:
 public:
     Disk(const Vec3f &N, const Vec3f &c, const float &r) : normal(N), center(c), radius(r), radius2(r*r) {}
 
-    bool intersect(const Vec3f &orig, const Vec3f &dir, float &t) const {
+    bool intersect(const Vec3f &orig, const Vec3f &dir, float &t, uint32_t &index, Vec2f &uv) const {
+        uv = 0;
         float det = dir.dotProduct(normal);
 #ifdef CULLING
         if(det < kEpsilon) return false;
@@ -288,7 +296,7 @@ public:
         return true;
     }
 
-    void getSurfaceData(const Vec3f &Phit, Vec3f &Nhit, Vec2f &tex) const {
+    void getSurfaceData(const Vec3f &Phit, const Vec3f &dir, const uint32_t &index, const Vec2f &uv, Vec3f &Nhit, Vec2f &tex) const {
         Nhit = normal;
         tex.x = (1 + atan2(Nhit.z, Nhit.x) / M_PI) * 0.5;
         tex.y = acosf(Nhit.y) / M_PI;
@@ -313,14 +321,19 @@ public:
  * @param hitObject
  * @return
  */
-bool trace(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique_ptr<Object>> &objects, float &tNear, const Object *&hitObject) {
+bool trace(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique_ptr<Object>> &objects, float &tNear, uint32_t &index, Vec2f &uv, const Object *&hitObject) {
     tNear = kInfinity;
     std::vector<std::unique_ptr<Object>>::const_iterator iter = objects.begin();
     for(; iter != objects.end(); ++iter) {
         float t = kInfinity;
-        if((*iter)->intersect(orig, dir, t) && t < tNear) {
+        uint32_t indexForFace;
+        Vec2f uvForFace;
+
+        if((*iter)->intersect(orig, dir, t, indexForFace, uvForFace) && t < tNear) {
             hitObject = iter->get();
             tNear = t;
+            index = indexForFace;
+            uv = uvForFace;
         }
     }
 
@@ -338,11 +351,14 @@ Vec3f castRay(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique
     Vec3f hitColor = 0;
     const Object *hitObject = nullptr;
     float t;
-    if(trace(orig, dir, objects, t, hitObject)) {
+
+    uint32_t index = 0;
+    Vec2f uv;
+    if(trace(orig, dir, objects, t, index, uv, hitObject)) {
         Vec3f Phit = orig + dir * t;
         Vec3f Nhit;
         Vec2f tex;
-        hitObject->getSurfaceData(Phit, Nhit, tex);
+        hitObject->getSurfaceData(Phit, dir, index, uv,Nhit, tex);
 
         float scale = 4;
         float pattern = (fmodf(tex.x * scale, 1) > 0.5) ^ (fmodf(tex.y * scale, 1) > 0.5);
