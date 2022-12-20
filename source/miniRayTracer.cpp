@@ -143,6 +143,86 @@ public:
     }
 };
 
+bool intersectTriangle(const Vec3f &orig, const Vec3f &dir, const Vec3f &vertex0, const Vec3f &vertex1, const Vec3f &vertex2, float &t, float &u, float &v) {
+#ifdef METHOD_GEOMETRY // geometry solution
+    Vec3f v0v1 = vertex1 - vertex0;
+    Vec3f v0v2 = vertex2 - vertex0;
+
+    float denom = normal.dotProduct(normal);
+
+    // exclude parallel
+    float normalDotRayDirection = normal.dotProduct(dir);
+    if(abs(normalDotRayDirection) < kEpsilon)
+        return false;
+
+    // compute t for intersection
+    float D = -(normal.dotProduct(vertex0));
+    t = -(normal.dotProduct(orig) + D) / normalDotRayDirection;
+
+    // exclue t < 0, intersection behind the origin of the ray
+    if(t < 0) return false;
+
+    // get the hit point
+    Vec3f Phit = orig + t*dir;
+
+    Vec3f v0P = Phit - vertex0;
+    Vec3f v1P = Phit - vertex1;
+    Vec3f v2P = Phit - vertex2;
+
+    // judge hit point inside triangle or not
+    Vec3f J;
+    J = v0v1.crossProduct(v0P);
+    if(normal.dotProduct(J) < 0) return false;
+
+    Vec3f v1v2 = vertex2 - vertex1;
+    J = v1v2.crossProduct(v1P);
+    if((u = normal.dotProduct(J))< 0) return false;
+
+    Vec3f v2v0 = vertex0 - vertex2;
+    J = (-v0v2).crossProduct(v2P);
+    if((v = normal.dotProduct(J)) < 0) return false;
+
+    u /= denom;
+    v /= denom;
+
+    uv.x = u;
+    uv.y = v;
+
+    return true;
+
+#else // MOLLER_TRUMBORE
+    Vec3f v0v1 = vertex1 - vertex0;
+    Vec3f v0v2 = vertex2 - vertex0;
+    // v0v1 ✖️ v0v2 -> normal
+    // v0v2 ✖️ v0v1 -> -normal
+    // dir . (v0v1 ✖️ v0v2) = -dir . (v0v2 ✖️ v0v1) = -(dir ✖️ v0v2) . v0v1
+    // P = (dir ✖️ v0v2)
+    Vec3f P = dir.crossProduct(v0v2);
+
+    float det = v0v1.dotProduct(P);
+#ifdef CULLING //  det < 0 should be culled
+    if(det < kEpsilon) return false;
+#else
+    if(abs(det) < kEpsilon) return false;
+#endif
+    Vec3f T = orig - vertex0;
+
+    float inverseDet = 1 / det;
+
+    u = inverseDet * P.dotProduct(T);
+    if(u < 0) return false;
+
+    Vec3f Q = T.crossProduct(v0v1);
+
+    v = inverseDet * Q.dotProduct(dir);
+    if(v < 0 || u+v > 1) return false;
+
+    t = inverseDet * Q.dotProduct(v0v2);
+
+    return true;
+#endif
+}
+
 class Triangle : public Object {
 private:
     Vec3f vertex0, vertex1, vertex2;
@@ -157,83 +237,12 @@ public:
 
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &t, uint32_t &index, Vec2f &uv) const {
         float u, v;
-#ifdef METHOD_GEOMETRY // geometry solution
-        Vec3f v0v1 = vertex1 - vertex0;
-        Vec3f v0v2 = vertex2 - vertex0;
-
-        float denom = normal.dotProduct(normal);
-
-        // exclude parallel
-        float normalDotRayDirection = normal.dotProduct(dir);
-        if(abs(normalDotRayDirection) < kEpsilon)
-            return false;
-
-        // compute t for intersection
-        float D = -(normal.dotProduct(vertex0));
-        t = -(normal.dotProduct(orig) + D) / normalDotRayDirection;
-
-        // exclue t < 0, intersection behind the origin of the ray
-        if(t < 0) return false;
-
-        // get the hit point
-        Vec3f Phit = orig + t*dir;
-
-        Vec3f v0P = Phit - vertex0;
-        Vec3f v1P = Phit - vertex1;
-        Vec3f v2P = Phit - vertex2;
-
-        // judge hit point inside triangle or not
-        Vec3f J;
-        J = v0v1.crossProduct(v0P);
-        if(normal.dotProduct(J) < 0) return false;
-
-        Vec3f v1v2 = vertex2 - vertex1;
-        J = v1v2.crossProduct(v1P);
-        if((u = normal.dotProduct(J))< 0) return false;
-
-        Vec3f v2v0 = vertex0 - vertex2;
-        J = (-v0v2).crossProduct(v2P);
-        if((v = normal.dotProduct(J)) < 0) return false;
-
-        u /= denom;
-        v /= denom;
-
-        uv.x = u;
-        uv.y = v;
-
-        return true;
-
-#else // MOLLER_TRUMBORE
-        Vec3f v0v1 = vertex1 - vertex0;
-        Vec3f v0v2 = vertex2 - vertex0;
-        // v0v1 ✖️ v0v2 -> normal
-        // v0v2 ✖️ v0v1 -> -normal
-        // dir . (v0v1 ✖️ v0v2) = -dir . (v0v2 ✖️ v0v1) = -(dir ✖️ v0v2) . v0v1
-        // P = (dir ✖️ v0v2)
-        Vec3f P = dir.crossProduct(v0v2);
-
-        float det = v0v1.dotProduct(P);
-#ifdef CULLING //  det < 0 should be culled
-        if(det < kEpsilon) return false;
-#else
-        if(abs(det) < kEpsilon) return false;
-#endif
-        Vec3f T = orig - vertex0;
-
-        float inverseDet = 1 / det;
-
-        u = inverseDet * P.dotProduct(T);
-        if(u < 0) return false;
-
-        Vec3f Q = T.crossProduct(v0v1);
-
-        v = inverseDet * Q.dotProduct(dir);
-        if(v < 0 || u+v > 1) return false;
-
-        t = inverseDet * Q.dotProduct(v0v2);
-
-        return true;
-#endif
+        if(intersectTriangle(orig, dir, vertex0, vertex1, vertex2, t, u, v)) {
+            uv.x = u;
+            uv.y = v;
+            return true;
+        }
+        return false;
     }
 
     void getSurfaceData(const Vec3f &Phit, const Vec3f &dir, const uint32_t &index, const Vec2f &uv, Vec3f &Nhit, Vec2f &tex) const {
@@ -243,6 +252,90 @@ public:
     }
 };
 
+class TriangleMesh : public Object {
+private:
+    uint32_t numTris; // number of triangles in this Triangle Mesh
+    std::unique_ptr<Vec3f []> P; // vertices position in theis Triangle Mesh
+    std::unique_ptr<uint32_t []> triangleVerticesIndex; // vertex index array
+    std::unique_ptr<Vec3f []> N; // normal for triangles
+    std::unique_ptr<Vec2f []> texCoordinates; // texture for triangles
+public:
+    TriangleMesh(const uint32_t numFaces, // the input mesh may not be triangulated
+                 const std::unique_ptr<uint32_t []> &faceIndex,
+                 const std::unique_ptr<uint32_t []> &verticesIndex,
+                 const std::unique_ptr<Vec3f []> &vertices,
+                 std::unique_ptr<Vec3f []> &normals,
+                 std::unique_ptr<Vec2f []> &uv) : numTris(0) {
+        uint32_t accumulateIndex = 0, maxVerticesIndex = 0;
+
+        // find out the total num of triangles in this mesh
+        for(uint32_t i=0; i<numFaces; ++i) {
+            // record how many triangles are needed. the polygon with 5 vertices, need 5 - 2 = 3 triangles to represent
+            numTris += faceIndex[i] - 2;
+            for(uint32_t j=0; j<faceIndex[i]; ++j) {
+                // find the largest index for vertices, then allocate memory to store them
+                if(verticesIndex[accumulateIndex+j] > maxVerticesIndex)
+                    maxVerticesIndex = verticesIndex[accumulateIndex+j];
+            }
+            accumulateIndex += faceIndex[i];
+        }
+        maxVerticesIndex += 1;
+
+        // allocate memory to store this vertices
+        P = std::unique_ptr<Vec3f []>(new Vec3f[maxVerticesIndex]);
+        for(uint32_t i=0; i<maxVerticesIndex; ++i) {
+            P[i] = vertices[i];
+        }
+
+        // allocate memory to store triangle indices
+        triangleVerticesIndex = std::unique_ptr<uint32_t []>(new uint32_t[numTris*3]);
+        uint32_t l = 0;
+        N = std::unique_ptr<Vec3f []>(new Vec3f[numTris*3]);
+        texCoordinates = std::unique_ptr<Vec2f []>(new Vec2f[numTris*3]);
+        for(uint32_t i=0, accumulateIndex=0; i<numFaces; ++i) {
+            for(uint32_t j=0; j<faceIndex[i] - 2; ++j) {
+                triangleVerticesIndex[l] = verticesIndex[accumulateIndex];
+                triangleVerticesIndex[l + 1] = verticesIndex[accumulateIndex + j + 1];
+                triangleVerticesIndex[l + 2] = verticesIndex[accumulateIndex + j + 2];
+                N[l] = normals[accumulateIndex];
+                N[l + 1] = normals[accumulateIndex + j + 1];
+                N[l + 2] = normals[accumulateIndex + j + 2];
+                texCoordinates[l] = uv[accumulateIndex];
+                texCoordinates[l + 1] = uv[accumulateIndex + j + 1];
+                texCoordinates[l + 2] = uv[accumulateIndex + j + 2];
+                l += 3;
+            }
+            accumulateIndex += faceIndex[i];
+        }
+
+    }
+
+    bool intersect(const Vec3f &orig, const Vec3f &dir, float &tNear, uint32_t &index, Vec2f &uv) const {
+        uint32_t  j = 0;
+        bool isIntersect = false;
+        for(uint32_t i=0; i<numTris; ++i) {
+            Vec3f &v0 = P[triangleVerticesIndex[j]];
+            Vec3f &v1 = P[triangleVerticesIndex[j + 1]];
+            Vec3f &v2 = P[triangleVerticesIndex[j + 2]];
+            float u, v, t = kInfinity;
+            if(intersectTriangle(orig, dir, v0, v1, v2, t, u, v) && t < tNear) {
+                t = tNear;
+                uv.x = u;
+                uv.y = v;
+                isIntersect = true;
+                index = i;
+            }
+            j += 3;
+        }
+        return isIntersect;
+    }
+
+    void getSurfaceData(const Vec3f &Phit, const Vec3f &dir, const uint32_t &index, const Vec2f &uv, Vec3f &Nhit, Vec2f &tex) const {
+        Nhit = N[index];
+        tex.x = (1 + atan2(Nhit.z, Nhit.x) / M_PI) * 0.5;
+        tex.y = acosf(Nhit.y) / M_PI;
+    }
+};
 
 class Plane : public Object {
 private:
@@ -302,7 +395,6 @@ public:
         tex.y = acosf(Nhit.y) / M_PI;
     }
 };
-
 
 class Box : public Object {
 private:
