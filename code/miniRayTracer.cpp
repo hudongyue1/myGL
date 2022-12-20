@@ -12,6 +12,7 @@
 #include <cmath>
 #include <limits>
 #include <random>
+#include <sstream>
 
 # include "geometry.h"
 
@@ -254,12 +255,13 @@ public:
 
 class TriangleMesh : public Object {
 private:
-    uint32_t numTris; // number of triangles in this Triangle Mesh
+
     std::unique_ptr<Vec3f []> P; // vertices position in theis Triangle Mesh
     std::unique_ptr<uint32_t []> triangleVerticesIndex; // vertex index array
     std::unique_ptr<Vec3f []> N; // normal for triangles
     std::unique_ptr<Vec2f []> texCoordinates; // texture for triangles
 public:
+    uint32_t numTris; // number of triangles in this Triangle Mesh
     TriangleMesh(const uint32_t numFaces, // the input mesh may not be triangulated
                  const std::unique_ptr<uint32_t []> &faceIndex,
                  const std::unique_ptr<uint32_t []> &verticesIndex,
@@ -319,7 +321,7 @@ public:
             Vec3f &v2 = P[triangleVerticesIndex[j + 2]];
             float u, v, t = kInfinity;
             if(intersectTriangle(orig, dir, v0, v1, v2, t, u, v) && t < tNear) {
-                t = tNear;
+                tNear = t;
                 uv.x = u;
                 uv.y = v;
                 isIntersect = true;
@@ -331,9 +333,25 @@ public:
     }
 
     void getSurfaceData(const Vec3f &Phit, const Vec3f &dir, const uint32_t &index, const Vec2f &uv, Vec3f &Nhit, Vec2f &tex) const {
-        Nhit = N[index];
-        tex.x = (1 + atan2(Nhit.z, Nhit.x) / M_PI) * 0.5;
-        tex.y = acosf(Nhit.y) / M_PI;
+        // face normal
+        const Vec3f &v0 = P[triangleVerticesIndex[index * 3]];
+        const Vec3f &v1 = P[triangleVerticesIndex[index * 3 + 1]];
+        const Vec3f &v2 = P[triangleVerticesIndex[index * 3 + 2]];
+
+        Nhit = (v1 - v0).crossProduct(v2 - v0);
+        Nhit.normalize();
+
+        // texture coordinates
+        const Vec2f  &st0 = texCoordinates[index * 3];
+        const Vec2f  &st1 = texCoordinates[index * 3 + 1];
+        const Vec2f  &st2 = texCoordinates[index * 3 + 2];
+        tex = (1 - uv.x - uv.y) * st0 + uv.x * st1 + uv.y * st2;
+
+        // vertex normal
+        const Vec3f &n0 = N[index * 3];
+        const Vec3f &n1 = N[index * 3 + 1];
+        const Vec3f &n2 = N[index * 3 + 2];
+        Nhit = (1 - uv.x - uv.y) * n0 + uv.x * n1 + uv.y * n2;
     }
 };
 
@@ -439,8 +457,8 @@ bool trace(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique_pt
  * @param objects
  * @return
  */
-Vec3f castRay(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique_ptr<Object>> &objects) {
-    Vec3f hitColor = 0;
+Vec3f castRay(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique_ptr<Object>> &objects, const Options &options) {
+    Vec3f hitColor = options.backgroundColor;
     const Object *hitObject = nullptr;
     float t;
 
@@ -474,7 +492,7 @@ void render(const Options &options, const std::vector<std::unique_ptr<Object>> &
 
     Vec3f orig;
     options.cameraToWorld.multVecMatrix(Vec3f(0), orig);
-
+    auto timeStart = std::chrono::high_resolution_clock::now();
     for(uint32_t j=0; j<options.height; ++j) {
         for(uint32_t i=0; i<options.width; ++i) {
             float x = (2 * (i + 0.5) / (float) options.width - 1) * scale * imageAspectRatio;
@@ -483,9 +501,12 @@ void render(const Options &options, const std::vector<std::unique_ptr<Object>> &
             Vec3f dir;
             options.cameraToWorld.multDirMatrix(Vec3f(x, y, -1), dir);
             dir.normalize();
-            *(pix++) = castRay(orig, dir, objects);
+            *(pix++) = castRay(orig, dir, objects, options);
         }
     }
+    auto timeEnd = std::chrono::high_resolution_clock::now();
+    auto passedTime = std::chrono::duration<double, std::milli>(timeEnd - timeStart).count();
+    fprintf(stderr, "\rDone: %.2f (sec)\n", passedTime / 1000);
 
     std::ofstream ofs("./out/out.ppm", std::ios::out | std::ios::binary);
     ofs << "P6\n" << options.width << " " << options.height << "\n225\n";
@@ -501,16 +522,150 @@ void render(const Options &options, const std::vector<std::unique_ptr<Object>> &
     delete [] framebuffer;
 }
 
+TriangleMesh* generatePolyShphere(float rad, uint32_t divs)
+{
+    // generate points
+    uint32_t numVertices = (divs - 1) * divs + 2;
+    std::unique_ptr<Vec3f []> P(new Vec3f[numVertices]);
+    std::unique_ptr<Vec3f []> N(new Vec3f[numVertices]);
+    std::unique_ptr<Vec2f []> st(new Vec2f[numVertices]);
+
+    float u = -M_PI_2;
+    float v = -M_PI;
+    float du = M_PI / divs;
+    float dv = 2 * M_PI / divs;
+
+    P[0] = N[0] = Vec3f(0, -rad, 0);
+    uint32_t k = 1;
+    for (uint32_t i = 0; i < divs - 1; i++) {
+        u += du;
+        v = -M_PI;
+        for (uint32_t j = 0; j < divs; j++) {
+            float x = rad * cos(u) * cos(v);
+            float y = rad * sin(u);
+            float z = rad * cos(u) * sin(v) ;
+            P[k] = N[k] = Vec3f(x, y, z);
+            st[k].x = u / M_PI + 0.5;
+            st[k].y = v * 0.5 / M_PI + 0.5;
+            v += dv, k++;
+        }
+    }
+    P[k] = N[k] = Vec3f(0, rad, 0);
+
+    uint32_t npolys = divs * divs;
+    std::unique_ptr<uint32_t []> faceIndex(new uint32_t[npolys]);
+    std::unique_ptr<uint32_t []> vertsIndex(new uint32_t[(6 + (divs - 1) * 4) * divs]);
+
+    // create the connectivity lists
+    uint32_t vid = 1, numV = 0, l = 0;
+    k = 0;
+    for (uint32_t i = 0; i < divs; i++) {
+        for (uint32_t j = 0; j < divs; j++) {
+            if (i == 0) {
+                faceIndex[k++] = 3;
+                vertsIndex[l] = 0;
+                vertsIndex[l + 1] = j + vid;
+                vertsIndex[l + 2] = (j == (divs - 1)) ? vid : j + vid + 1;
+                l += 3;
+            }
+            else if (i == (divs - 1)) {
+                faceIndex[k++] = 3;
+                vertsIndex[l] = j + vid + 1 - divs;
+                vertsIndex[l + 1] = vid + 1;
+                vertsIndex[l + 2] = (j == (divs - 1)) ? vid + 1 - divs : j + vid + 2 - divs;
+                l += 3;
+            }
+            else {
+                faceIndex[k++] = 4;
+                vertsIndex[l] = j + vid + 1 - divs;
+                vertsIndex[l + 1] = j + vid + 1;
+                vertsIndex[l + 2] = (j == (divs - 1)) ? vid + 1 : j + vid + 2;
+                vertsIndex[l + 3] = (j == (divs - 1)) ? vid + 1 - divs : j + vid + 2 - divs;
+                l += 4;
+            }
+            numV++;
+        }
+        vid = numV;
+    }
+
+    return new TriangleMesh(npolys, faceIndex, vertsIndex, P, N, st);
+}
+
+TriangleMesh* loadPolyMeshFromFile(const char *file)
+{
+    std::ifstream ifs;
+    try {
+        ifs.open(file);
+        if (ifs.fail()) throw;
+        std::stringstream ss;
+        ss << ifs.rdbuf();
+        uint32_t numFaces;
+        ss >> numFaces;
+        std::unique_ptr<uint32_t []> faceIndex(new uint32_t[numFaces]);
+        uint32_t vertsIndexArraySize = 0;
+        // reading face index array
+        for (uint32_t i = 0; i < numFaces; ++i) {
+            ss >> faceIndex[i];
+            vertsIndexArraySize += faceIndex[i];
+        }
+        std::unique_ptr<uint32_t []> vertsIndex(new uint32_t[vertsIndexArraySize]);
+        uint32_t vertsArraySize = 0;
+        // reading vertex index array
+        for (uint32_t i = 0; i < vertsIndexArraySize; ++i) {
+            ss >> vertsIndex[i];
+            if (vertsIndex[i] > vertsArraySize) vertsArraySize = vertsIndex[i];
+        }
+        vertsArraySize += 1;
+        // reading vertices
+        std::unique_ptr<Vec3f []> verts(new Vec3f[vertsArraySize]);
+        for (uint32_t i = 0; i < vertsArraySize; ++i) {
+            ss >> verts[i].x >> verts[i].y >> verts[i].z;
+        }
+        // reading normals
+        std::unique_ptr<Vec3f []> normals(new Vec3f[vertsIndexArraySize]);
+        for (uint32_t i = 0; i < vertsIndexArraySize; ++i) {
+            ss >> normals[i].x >> normals[i].y >> normals[i].z;
+        }
+        // reading st coordinates
+        std::unique_ptr<Vec2f []> st(new Vec2f[vertsIndexArraySize]);
+        for (uint32_t i = 0; i < vertsIndexArraySize; ++i) {
+            ss >> st[i].x >> st[i].y;
+        }
+
+        return new TriangleMesh(numFaces, faceIndex, vertsIndex, verts, normals, st);
+    }
+    catch (...) {
+        ifs.close();
+    }
+    ifs.close();
+
+    return nullptr;
+}
+
 int main(int argc, char **argv) {
     std::vector<std::unique_ptr<Object>> objects;
 
     uint32_t numSpheres = 3;
     gen.seed(0);
 
+
+    // setting up options
+    Options options;
+    options.width = 640;
+    options.height = 480;
+//    options.width = 2560;
+//    options.height = 1600;
+    options.backgroundColor = kDefaultBackgroundColor;
+    options.fov = 51.52;
+
+#if 0
+
+    options.cameraToWorld = Matrix44f(0.945519, 0, -0.325569, 0, -0.179534, 0.834209, -0.521403, 0, 0.271593, 0.551447, 0.78876, 0, 4.208271, 8.374532, 17.932925, 1);
+
     // sphere
     for (uint32_t i = 0; i < numSpheres; ++i) {
         Vec3f randPos((0.5 - dis(gen)) * 10, (0.5 - dis(gen)) * 10, (0.5 + dis(gen) * 10));
-        float randRadius = (0.5 + dis(gen) * 0.5);
+        float randRadius = (0.5 + dis(gen) * 1);
         objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius)));
     }
 
@@ -531,15 +686,15 @@ int main(int argc, char **argv) {
     float radius2 = 2;
     objects.push_back(std::unique_ptr<Object>(new Disk(normal2, center2, radius2)));
 
-    // setting up options
-    Options options;
-    options.width = 640;
-    options.height = 480;
-    options.backgroundColor = kDefaultBackgroundColor;
-//    options.width = 2560;
-//    options.height = 1600;
-    options.fov = 51.52;
-    options.cameraToWorld = Matrix44f(0.945519, 0, -0.325569, 0, -0.179534, 0.834209, -0.521403, 0, 0.271593, 0.551447, 0.78876, 0, 4.208271, 8.374532, 17.932925, 1);
+#else
+
+    Matrix44f tmp = Matrix44f(0.707107, -0.331295, 0.624695, 0, 0, 0.883452, 0.468521, 0, -0.707107, -0.331295, 0.624695, 0, -1.63871, -5.747777, -40.400412, 1);
+    options.cameraToWorld = tmp.inverse();
+
+    TriangleMesh *mesh = loadPolyMeshFromFile("./resource/cow.geo");
+    if (mesh != nullptr) objects.push_back(std::unique_ptr<Object>(mesh));
+
+# endif
 
     render(options, objects);
 
