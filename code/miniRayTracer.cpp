@@ -60,6 +60,7 @@ struct Options {
     Vec3f backgroundColor;
     float fov;
     Matrix44f cameraToWorld;
+    float bias;
 };
 
 bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, float &x1) {
@@ -81,7 +82,7 @@ bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, f
 // the virtual class for supported object
 class Object {
 public:
-    Object() : color(dis(gen), dis(gen), dis(gen)) {}
+    Object(const Matrix44f &o2w) : color(dis(gen), dis(gen), dis(gen)), objectToWorld(o2w), worldToObject(o2w.inverse()) {}
     virtual ~Object() {}
 
     // weather intersect and the distance of hit point
@@ -90,6 +91,7 @@ public:
     // get the surface date for texture in the hit point
     virtual void getSurfaceData(const Vec3f &, const Vec3f &, const uint32_t &, const Vec2f &, Vec3f &, Vec2f &) const = 0;
     Vec3f color;
+    Matrix44f objectToWorld, worldToObject;
 };
 
 /**
@@ -103,7 +105,10 @@ private:
     float radius, radius2;
     Vec3f center;
 public:
-    Sphere(const Vec3f &c, const float &r) : center(c), radius(r), radius2(r*r) {}
+    Sphere(const Vec3f &c, const float &r, const Matrix44f &o2w = Matrix44f()) : center(c), radius(r), radius2(r*r), Object(o2w) {
+
+        objectToWorld = o2w;
+    }
 
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &t, uint32_t &index, Vec2f &uv) const {
         uv = 0;
@@ -229,7 +234,8 @@ private:
     Vec3f vertex0, vertex1, vertex2;
     Vec3f normal;
 public:
-    Triangle(const Vec3f &v0, const Vec3f &v1, const Vec3f &v2) : vertex0(v0), vertex1(v1), vertex2(v2) {
+    Triangle(const Vec3f &v0, const Vec3f &v1, const Vec3f &v2, const Matrix44f &o2w = Matrix44f()) :
+    vertex0(v0), vertex1(v1), vertex2(v2), Object(o2w) {
         Vec3f v0v1 = vertex1 - vertex0;
         Vec3f v0v2 = vertex2 - vertex0;
         normal = v0v1.crossProduct(v0v2);
@@ -267,7 +273,8 @@ public:
                  const std::unique_ptr<uint32_t []> &verticesIndex,
                  const std::unique_ptr<Vec3f []> &vertices,
                  std::unique_ptr<Vec3f []> &normals,
-                 std::unique_ptr<Vec2f []> &uv) : numTris(0) {
+                 std::unique_ptr<Vec2f []> &uv, const Matrix44f &o2w = Matrix44f()) :
+                 numTris(0), Object(o2w) {
         uint32_t accumulateIndex = 0, maxVerticesIndex = 0;
 
         // find out the total num of triangles in this mesh
@@ -359,7 +366,7 @@ class Plane : public Object {
 private:
     Vec3f normal;
 public:
-    Plane(const Vec3f &N) : normal(N) {}
+    Plane(const Vec3f &N, const Matrix44f &o2w = Matrix44f()) : normal(N), Object(o2w) {}
 
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &t, uint32_t &index, Vec2f &uv) const {
         uv = 0;
@@ -386,7 +393,8 @@ private:
     Vec3f center;
     float radius, radius2;
 public:
-    Disk(const Vec3f &N, const Vec3f &c, const float &r) : normal(N), center(c), radius(r), radius2(r*r) {}
+    Disk(const Vec3f &N, const Vec3f &c, const float &r, const Matrix44f &o2w = Matrix44f()) :
+    normal(N), center(c), radius(r), radius2(r*r), Object(o2w) {}
 
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &t, uint32_t &index, Vec2f &uv) const {
         uv = 0;
@@ -657,7 +665,7 @@ int main(int argc, char **argv) {
 //    options.height = 1600;
     options.backgroundColor = kDefaultBackgroundColor;
     options.fov = 51.52;
-
+    options.bias = 1e-4;
 #if 0
 
     options.cameraToWorld = Matrix44f(0.945519, 0, -0.325569, 0, -0.179534, 0.834209, -0.521403, 0, 0.271593, 0.551447, 0.78876, 0, 4.208271, 8.374532, 17.932925, 1);
