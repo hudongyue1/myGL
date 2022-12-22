@@ -105,9 +105,10 @@ private:
     float radius, radius2;
     Vec3f center;
 public:
-    Sphere(const Vec3f &c, const float &r, const Matrix44f &o2w = Matrix44f()) : center(c), radius(r), radius2(r*r), Object(o2w) {
-
-        objectToWorld = o2w;
+    Sphere(const Vec3f &c, const float &r, const Matrix44f &o2w = Matrix44f()) :Object (o2w) {
+        radius = r;
+        radius2 = r * r;
+        objectToWorld.multDirMatrix(c, center);
     }
 
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &t, uint32_t &index, Vec2f &uv) const {
@@ -234,12 +235,16 @@ private:
     Vec3f vertex0, vertex1, vertex2;
     Vec3f normal;
 public:
-    Triangle(const Vec3f &v0, const Vec3f &v1, const Vec3f &v2, const Matrix44f &o2w = Matrix44f()) :
-    vertex0(v0), vertex1(v1), vertex2(v2), Object(o2w) {
+    Triangle(const Vec3f &v0, const Vec3f &v1, const Vec3f &v2, const Matrix44f &o2w = Matrix44f()) : Object(o2w) {
+        objectToWorld.multDirMatrix(v0, vertex0);
+        objectToWorld.multDirMatrix(v1, vertex1);
+        objectToWorld.multDirMatrix(v2, vertex2);
+
         Vec3f v0v1 = vertex1 - vertex0;
         Vec3f v0v2 = vertex2 - vertex0;
         normal = v0v1.crossProduct(v0v2);
         normal.normalize();
+
     }
 
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &t, uint32_t &index, Vec2f &uv) const {
@@ -287,14 +292,16 @@ public:
                     maxVerticesIndex = verticesIndex[accumulateIndex+j];
             }
             accumulateIndex += faceIndex[i];
-        }
-        maxVerticesIndex += 1;
+        }maxVerticesIndex += 1;
 
         // allocate memory to store this vertices
         P = std::unique_ptr<Vec3f []>(new Vec3f[maxVerticesIndex]);
         for(uint32_t i=0; i<maxVerticesIndex; ++i) {
-            P[i] = vertices[i];
+            objectToWorld.multDirMatrix(vertices[i], P[i]);
         }
+
+        // used to transform normals
+        Matrix44f transformNormals = worldToObject.transpose();
 
         // allocate memory to store triangle indices
         triangleVerticesIndex = std::unique_ptr<uint32_t []>(new uint32_t[numTris*3]);
@@ -306,9 +313,9 @@ public:
                 triangleVerticesIndex[l] = verticesIndex[accumulateIndex];
                 triangleVerticesIndex[l + 1] = verticesIndex[accumulateIndex + j + 1];
                 triangleVerticesIndex[l + 2] = verticesIndex[accumulateIndex + j + 2];
-                N[l] = normals[accumulateIndex];
-                N[l + 1] = normals[accumulateIndex + j + 1];
-                N[l + 2] = normals[accumulateIndex + j + 2];
+                transformNormals.multDirMatrix(normals[accumulateIndex], N[l]);
+                transformNormals.multDirMatrix(normals[accumulateIndex + j + 1], N[l + 1]);
+                transformNormals.multDirMatrix(normals[accumulateIndex + j + 2], N[l + 2]);
                 texCoordinates[l] = uv[accumulateIndex];
                 texCoordinates[l + 1] = uv[accumulateIndex + j + 1];
                 texCoordinates[l + 2] = uv[accumulateIndex + j + 2];
@@ -366,7 +373,10 @@ class Plane : public Object {
 private:
     Vec3f normal;
 public:
-    Plane(const Vec3f &N, const Matrix44f &o2w = Matrix44f()) : normal(N), Object(o2w) {}
+    Plane(const Vec3f &N, const Matrix44f &o2w = Matrix44f()) : Object(o2w) {
+        Matrix44f transformNormals = worldToObject.transpose();
+        transformNormals.multDirMatrix(N, normal);
+    }
 
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &t, uint32_t &index, Vec2f &uv) const {
         uv = 0;
@@ -394,7 +404,13 @@ private:
     float radius, radius2;
 public:
     Disk(const Vec3f &N, const Vec3f &c, const float &r, const Matrix44f &o2w = Matrix44f()) :
-    normal(N), center(c), radius(r), radius2(r*r), Object(o2w) {}
+    normal(N), center(c), radius(r), radius2(r*r), Object(o2w) {
+        radius = r;
+        radius2 = r * r;
+        objectToWorld.multDirMatrix(c, center);
+        Matrix44f transformNormal = worldToObject.transpose();
+        transformNormal.multDirMatrix(N, normal);
+    }
 
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &t, uint32_t &index, Vec2f &uv) const {
         uv = 0;
