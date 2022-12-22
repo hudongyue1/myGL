@@ -16,9 +16,10 @@
 
 # include "geometry.h"
 
-#if !defined METHOD_GEOMETRY || !defined CULLING
+#if !defined METHOD_GEOMETRY || !defined CULLING || !FACE_NORMAL
 //#define METHOD_GEOMETRY
 //#define CULLING
+//#define FACE_NORMAL
 
 /*
  *
@@ -155,6 +156,9 @@ bool intersectTriangle(const Vec3f &orig, const Vec3f &dir, const Vec3f &vertex0
     Vec3f v0v1 = vertex1 - vertex0;
     Vec3f v0v2 = vertex2 - vertex0;
 
+    Vec3f normal = v0v1.crossProduct(v0v2);
+    normal.normalize();
+
     float denom = normal.dotProduct(normal);
 
     // exclude parallel
@@ -191,9 +195,6 @@ bool intersectTriangle(const Vec3f &orig, const Vec3f &dir, const Vec3f &vertex0
 
     u /= denom;
     v /= denom;
-
-    uv.x = u;
-    uv.y = v;
 
     return true;
 
@@ -233,18 +234,11 @@ bool intersectTriangle(const Vec3f &orig, const Vec3f &dir, const Vec3f &vertex0
 class Triangle : public Object {
 private:
     Vec3f vertex0, vertex1, vertex2;
-    Vec3f normal;
 public:
     Triangle(const Vec3f &v0, const Vec3f &v1, const Vec3f &v2, const Matrix44f &o2w = Matrix44f()) : Object(o2w) {
         objectToWorld.multDirMatrix(v0, vertex0);
         objectToWorld.multDirMatrix(v1, vertex1);
         objectToWorld.multDirMatrix(v2, vertex2);
-
-        Vec3f v0v1 = vertex1 - vertex0;
-        Vec3f v0v2 = vertex2 - vertex0;
-        normal = v0v1.crossProduct(v0v2);
-        normal.normalize();
-
     }
 
     bool intersect(const Vec3f &orig, const Vec3f &dir, float &t, uint32_t &index, Vec2f &uv) const {
@@ -258,6 +252,11 @@ public:
     }
 
     void getSurfaceData(const Vec3f &Phit, const Vec3f &dir, const uint32_t &index, const Vec2f &uv, Vec3f &Nhit, Vec2f &tex) const {
+        Vec3f v0v1 = vertex1 - vertex0;
+        Vec3f v0v2 = vertex2 - vertex0;
+
+        Vec3f normal = v0v1.crossProduct(v0v2);
+        normal.normalize();
         Nhit = normal;
         tex.x = (1 + atan2(Nhit.z, Nhit.x) / M_PI) * 0.5;
         tex.y = acosf(Nhit.y) / M_PI;
@@ -347,12 +346,20 @@ public:
     }
 
     void getSurfaceData(const Vec3f &Phit, const Vec3f &dir, const uint32_t &index, const Vec2f &uv, Vec3f &Nhit, Vec2f &tex) const {
+#ifdef FACE_NORMAL
         // face normal
         const Vec3f &v0 = P[triangleVerticesIndex[index * 3]];
         const Vec3f &v1 = P[triangleVerticesIndex[index * 3 + 1]];
         const Vec3f &v2 = P[triangleVerticesIndex[index * 3 + 2]];
-
         Nhit = (v1 - v0).crossProduct(v2 - v0);
+#else
+        // vertex normal
+        const Vec3f &n0 = N[index * 3];
+        const Vec3f &n1 = N[index * 3 + 1];
+        const Vec3f &n2 = N[index * 3 + 2];
+        Nhit = (1 - uv.x - uv.y) * n0 + uv.x * n1 + uv.y * n2;
+#endif
+
         Nhit.normalize();
 
         // texture coordinates
@@ -360,12 +367,6 @@ public:
         const Vec2f  &st1 = texCoordinates[index * 3 + 1];
         const Vec2f  &st2 = texCoordinates[index * 3 + 2];
         tex = (1 - uv.x - uv.y) * st0 + uv.x * st1 + uv.y * st2;
-
-        // vertex normal
-        const Vec3f &n0 = N[index * 3];
-        const Vec3f &n1 = N[index * 3 + 1];
-        const Vec3f &n2 = N[index * 3 + 2];
-        Nhit = (1 - uv.x - uv.y) * n0 + uv.x * n1 + uv.y * n2;
     }
 };
 
@@ -497,6 +498,7 @@ Vec3f castRay(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique
         float scale = 4;
         float pattern = (fmodf(tex.x * scale, 1) > 0.5) ^ (fmodf(tex.y * scale, 1) > 0.5);
         hitColor = std::max(0.f, Nhit.dotProduct(-dir)) * mix(hitObject->color, hitObject->color * 0.8, pattern);
+//        hitColor = std::max(0.f, Nhit.dotProduct(-dir));
     }
 
     return hitColor;
@@ -577,8 +579,9 @@ TriangleMesh* generatePolyShphere(float rad, uint32_t divs)
     P[k] = N[k] = Vec3f(0, rad, 0);
 
     uint32_t npolys = divs * divs;
+    uint32_t normalSize = (6 + (divs - 1) * 4) * divs;
     std::unique_ptr<uint32_t []> faceIndex(new uint32_t[npolys]);
-    std::unique_ptr<uint32_t []> vertsIndex(new uint32_t[(6 + (divs - 1) * 4) * divs]);
+    std::unique_ptr<uint32_t []> vertsIndex(new uint32_t[normalSize]);
 
     // create the connectivity lists
     uint32_t vid = 1, numV = 0, l = 0;
@@ -612,7 +615,21 @@ TriangleMesh* generatePolyShphere(float rad, uint32_t divs)
         vid = numV;
     }
 
-    return new TriangleMesh(npolys, faceIndex, vertsIndex, P, N, st);
+    // unify with the situation in loadPolyMeshFromFile
+    std::unique_ptr<Vec3f []> normal(new Vec3f[normalSize]);
+    std::unique_ptr<Vec2f []> stExpand(new Vec2f[normalSize]);
+
+    uint32_t accumulateIndex = 0;
+    for(uint32_t i=0; i<npolys; ++i) {
+        for(uint32_t j=0; j<faceIndex[i]; ++j) {
+            normal[accumulateIndex + j] = N[vertsIndex[accumulateIndex + j]];
+            stExpand[accumulateIndex + j] = st[vertsIndex[accumulateIndex + j]];
+        }
+        accumulateIndex += faceIndex[i];
+    }
+
+//    return new TriangleMesh(npolys, faceIndex, vertsIndex, P, N, st);
+    return new TriangleMesh(npolys, faceIndex, vertsIndex, P, normal, stExpand);
 }
 
 TriangleMesh* loadPolyMeshFromFile(const char *file)
@@ -675,15 +692,18 @@ int main(int argc, char **argv) {
 
     // setting up options
     Options options;
+#if 0 // control the resolution
     options.width = 640;
     options.height = 480;
-//    options.width = 2560;
-//    options.height = 1600;
+#else
+    options.width = 2560;
+    options.height = 1600;
+#endif
     options.backgroundColor = kDefaultBackgroundColor;
     options.fov = 51.52;
     options.bias = 1e-4;
-#if 0
 
+#if 0 // version 0.1
     options.cameraToWorld = Matrix44f(0.945519, 0, -0.325569, 0, -0.179534, 0.834209, -0.521403, 0, 0.271593, 0.551447, 0.78876, 0, 4.208271, 8.374532, 17.932925, 1);
 
     // sphere
@@ -710,13 +730,18 @@ int main(int argc, char **argv) {
     float radius2 = 2;
     objects.push_back(std::unique_ptr<Object>(new Disk(normal2, center2, radius2)));
 
-#else
+#elif 1 // version 0.2
 
     Matrix44f tmp = Matrix44f(0.707107, -0.331295, 0.624695, 0, 0, 0.883452, 0.468521, 0, -0.707107, -0.331295, 0.624695, 0, -1.63871, -5.747777, -40.400412, 1);
     options.cameraToWorld = tmp.inverse();
 
     TriangleMesh *mesh = loadPolyMeshFromFile("./resource/cow.geo");
     if (mesh != nullptr) objects.push_back(std::unique_ptr<Object>(mesh));
+
+# else // test Smooth Shading
+    options.cameraToWorld[3][2] = 4;
+    TriangleMesh *meshBall = generatePolyShphere(1.5, 16);
+    if(meshBall != nullptr) objects.push_back(std::unique_ptr<Object>(meshBall));
 
 # endif
 
