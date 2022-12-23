@@ -14,7 +14,8 @@
 #include <random>
 #include <sstream>
 
-# include "geometry.h"
+#include "geometry.h"
+#include "light.h"
 
 #if !defined METHOD_GEOMETRY || !defined CULLING || !FACE_NORMAL
 //#define METHOD_GEOMETRY
@@ -83,7 +84,7 @@ bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, f
 // the virtual class for supported object
 class Object {
 public:
-    Object(const Matrix44f &o2w) : color(dis(gen), dis(gen), dis(gen)), objectToWorld(o2w), worldToObject(o2w.inverse()) {}
+    Object(const float &al, const Matrix44f &o2w) : color(dis(gen), dis(gen), dis(gen)), albedo(al), objectToWorld(o2w), worldToObject(o2w.inverse()) {}
     virtual ~Object() {}
 
     // weather intersect and the distance of hit point
@@ -93,6 +94,7 @@ public:
     virtual void getSurfaceData(const Vec3f &, const Vec3f &, const uint32_t &, const Vec2f &, Vec3f &, Vec2f &) const = 0;
     Vec3f color;
     Matrix44f objectToWorld, worldToObject;
+    float albedo;
 };
 
 /**
@@ -106,7 +108,7 @@ private:
     float radius, radius2;
     Vec3f center;
 public:
-    Sphere(const Vec3f &c, const float &r, const Matrix44f &o2w = Matrix44f()) :Object (o2w) {
+    Sphere(const Vec3f &c, const float &r, const float &al = 0.18, const Matrix44f &o2w = Matrix44f()) :Object (al, o2w) {
         radius = r;
         radius2 = r * r;
         objectToWorld.multDirMatrix(c, center);
@@ -235,7 +237,7 @@ class Triangle : public Object {
 private:
     Vec3f vertex0, vertex1, vertex2;
 public:
-    Triangle(const Vec3f &v0, const Vec3f &v1, const Vec3f &v2, const Matrix44f &o2w = Matrix44f()) : Object(o2w) {
+    Triangle(const Vec3f &v0, const Vec3f &v1, const Vec3f &v2, const float &al = 0.18, const Matrix44f &o2w = Matrix44f()) : Object(al, o2w) {
         objectToWorld.multDirMatrix(v0, vertex0);
         objectToWorld.multDirMatrix(v1, vertex1);
         objectToWorld.multDirMatrix(v2, vertex2);
@@ -277,8 +279,8 @@ public:
                  const std::unique_ptr<uint32_t []> &verticesIndex,
                  const std::unique_ptr<Vec3f []> &vertices,
                  std::unique_ptr<Vec3f []> &normals,
-                 std::unique_ptr<Vec2f []> &uv, const Matrix44f &o2w = Matrix44f()) :
-                 numTris(0), Object(o2w) {
+                 std::unique_ptr<Vec2f []> &uv, const float &al = 0.18, const Matrix44f &o2w = Matrix44f()) :
+                 numTris(0), Object(al, o2w) {
         uint32_t accumulateIndex = 0, maxVerticesIndex = 0;
 
         // find out the total num of triangles in this mesh
@@ -374,7 +376,7 @@ class Plane : public Object {
 private:
     Vec3f normal;
 public:
-    Plane(const Vec3f &N, const Matrix44f &o2w = Matrix44f()) : Object(o2w) {
+    Plane(const Vec3f &N, const float &al = 0.18, const Matrix44f &o2w = Matrix44f()) : Object(al, o2w) {
         Matrix44f transformNormals = worldToObject.transpose();
         transformNormals.multDirMatrix(N, normal);
     }
@@ -404,8 +406,8 @@ private:
     Vec3f center;
     float radius, radius2;
 public:
-    Disk(const Vec3f &N, const Vec3f &c, const float &r, const Matrix44f &o2w = Matrix44f()) :
-    normal(N), center(c), radius(r), radius2(r*r), Object(o2w) {
+    Disk(const Vec3f &N, const Vec3f &c, const float &r, const float &al = 0.18, const Matrix44f &o2w = Matrix44f()) :
+    normal(N), center(c), radius(r), radius2(r*r), Object(al, o2w) {
         radius = r;
         radius2 = r * r;
         objectToWorld.multDirMatrix(c, center);
@@ -482,7 +484,10 @@ bool trace(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique_pt
  * @param objects
  * @return
  */
-Vec3f castRay(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique_ptr<Object>> &objects, const Options &options) {
+Vec3f castRay(const Vec3f &orig, const Vec3f &dir,
+              const std::vector<std::unique_ptr<Object>> &objects,
+              const std::unique_ptr<DistantLight> &light,
+              const Options &options) {
     Vec3f hitColor = options.backgroundColor;
     const Object *hitObject = nullptr;
     float t;
@@ -497,7 +502,8 @@ Vec3f castRay(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique
 
         float scale = 4;
         float pattern = (fmodf(tex.x * scale, 1) > 0.5) ^ (fmodf(tex.y * scale, 1) > 0.5);
-        hitColor = std::max(0.f, Nhit.dotProduct(-dir)) * mix(hitObject->color, hitObject->color * 0.8, pattern);
+        hitColor = hitObject->albedo / M_PI * light->intensity * std::max(0.f, Nhit.dotProduct(-dir)) * mix(hitObject->color, hitObject->color * 0.8, pattern);
+//        hitColor = hitObject->albedo / M_PI * light->intensity * std::max(0.f, Nhit.dotProduct(-dir));
 //        hitColor = std::max(0.f, Nhit.dotProduct(-dir));
     }
 
@@ -509,7 +515,7 @@ Vec3f castRay(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique
  * @param options
  * @param objects
  */
-void render(const Options &options, const std::vector<std::unique_ptr<Object>> &objects) {
+void render(const Options &options, const std::vector<std::unique_ptr<Object>> &objects, const std::unique_ptr<DistantLight> &light) {
     Vec3f *framebuffer = new Vec3f[options.width * options.height];
     Vec3f *pix = framebuffer;
 
@@ -527,7 +533,7 @@ void render(const Options &options, const std::vector<std::unique_ptr<Object>> &
             Vec3f dir;
             options.cameraToWorld.multDirMatrix(Vec3f(x, y, -1), dir);
             dir.normalize();
-            *(pix++) = castRay(orig, dir, objects, options);
+            *(pix++) = castRay(orig, dir, objects, light, options);
         }
     }
     auto timeEnd = std::chrono::high_resolution_clock::now();
@@ -690,9 +696,11 @@ int main(int argc, char **argv) {
     gen.seed(0);
 
 
+    std::unique_ptr<DistantLight> light = std::unique_ptr<DistantLight>(new DistantLight());
+
     // setting up options
     Options options;
-#if 0 // control the resolution
+#if 1 // control the resolution
     options.width = 640;
     options.height = 480;
 #else
@@ -730,7 +738,7 @@ int main(int argc, char **argv) {
     float radius2 = 2;
     objects.push_back(std::unique_ptr<Object>(new Disk(normal2, center2, radius2)));
 
-#elif 1 // version 0.2
+#elif 0 // version 0.2
 
     Matrix44f tmp = Matrix44f(0.707107, -0.331295, 0.624695, 0, 0, 0.883452, 0.468521, 0, -0.707107, -0.331295, 0.624695, 0, -1.63871, -5.747777, -40.400412, 1);
     options.cameraToWorld = tmp.inverse();
@@ -745,7 +753,7 @@ int main(int argc, char **argv) {
 
 # endif
 
-    render(options, objects);
+    render(options, objects, light);
 
     return 0;
 }
