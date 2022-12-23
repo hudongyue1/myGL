@@ -502,7 +502,7 @@ Vec3f castRay(const Vec3f &orig, const Vec3f &dir,
 
         float scale = 4;
         float pattern = (fmodf(tex.x * scale, 1) > 0.5) ^ (fmodf(tex.y * scale, 1) > 0.5);
-        hitColor = hitObject->albedo / M_PI * light->intensity * std::max(0.f, Nhit.dotProduct(-dir)) * mix(hitObject->color, hitObject->color * 0.8, pattern);
+        hitColor = hitObject->albedo / M_PI * light->intensity * std::max(0.f, Nhit.dotProduct(-light->dir)) * mix(hitObject->color, hitObject->color * 0.8, pattern);
 //        hitColor = hitObject->albedo / M_PI * light->intensity * std::max(0.f, Nhit.dotProduct(-dir));
 //        hitColor = std::max(0.f, Nhit.dotProduct(-dir));
     }
@@ -695,8 +695,8 @@ int main(int argc, char **argv) {
     uint32_t numSpheres = 3;
     gen.seed(0);
 
-
-    std::unique_ptr<DistantLight> light = std::unique_ptr<DistantLight>(new DistantLight());
+    Matrix44f l2w = Matrix44f(1, 4, 8, 0, 1, 2, 1, 0, 3, 1, 1, 0, 0, 0, 0, 1);
+    std::unique_ptr<DistantLight> light = std::unique_ptr<DistantLight>(new DistantLight(l2w));
 
     // setting up options
     Options options;
