@@ -8,6 +8,16 @@
 #include "geometry.h"
 #include "tools.h"
 
+// options in command
+struct Options {
+    uint32_t width = 640;
+    uint32_t height = 480;
+    Vec3f backgroundColor = kDefaultBackgroundColor;
+    float fov = 90;
+    Matrix44f cameraToWorld;
+    float bias = 1e-4;
+};
+
 // the virtual class for supported object
 class Object {
 public:
@@ -22,7 +32,15 @@ public:
     Vec3f color;
     Matrix44f objectToWorld, worldToObject;
     float albedo;
+    const char *name;
 };
 
+// intersection Info : hitObject, tNear, uv, index
+struct IntersecInfo {
+    const Object *hitObject = nullptr;
+    float tNear = kInfinity;
+    Vec2f uv;
+    uint32_t index = 0;
+};
 
 #endif //MYGL_OBJECT_H

@@ -34,24 +34,23 @@
  * @param hitObject
  * @return
  */
-bool trace(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique_ptr<Object>> &objects, float &tNear, uint32_t &index, Vec2f &uv, const Object *&hitObject) {
-    tNear = kInfinity;
+bool trace(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique_ptr<Object>> &objects, IntersecInfo &intersecInfo) {
     std::vector<std::unique_ptr<Object>>::const_iterator iter = objects.begin();
     for(; iter != objects.end(); ++iter) {
         float t = kInfinity;
         uint32_t indexForFace;
         Vec2f uvForFace;
 
-        if((*iter)->intersect(orig, dir, t, indexForFace, uvForFace) && t < tNear) {
+        if((*iter)->intersect(orig, dir, t, indexForFace, uvForFace) && t < intersecInfo.tNear) {
 //            std::cout << "intersect with something" << std::endl;
-            hitObject = iter->get();
-            tNear = t;
-            index = indexForFace;
-            uv = uvForFace;
+            intersecInfo.hitObject = iter->get();
+            intersecInfo.tNear = t;
+            intersecInfo.index = indexForFace;
+            intersecInfo.uv = uvForFace;
         }
     }
 
-    return (hitObject != nullptr);
+    return (intersecInfo.hitObject != nullptr);
 }
 
 /**
@@ -66,28 +65,34 @@ Vec3f castRay(const Vec3f &orig, const Vec3f &dir,
               const std::unique_ptr<DistantLight> &light,
               const Options &options) {
     Vec3f hitColor = options.backgroundColor;
-    const Object *hitObject = nullptr;
-    float t;
+//    const Object *hitObject = nullptr;
+//    float t;
+    IntersecInfo intersecInfo;
 
     uint32_t index = 0;
     Vec2f uv;
-    if(trace(orig, dir, objects, t, index, uv, hitObject)) {
-        Vec3f Phit = orig + dir * t;
+    if(trace(orig, dir, objects, intersecInfo)) {
+        Vec3f Phit = orig + dir * intersecInfo.tNear;
         Vec3f Nhit;
         Vec2f tex;
         Vec3f LightDir = light->dir;
-        hitObject->getSurfaceData(Phit, dir, index, uv,Nhit, tex);
+        intersecInfo.hitObject->getSurfaceData(Phit, dir, intersecInfo.index, intersecInfo.uv, Nhit, tex);
 
-        Vec2f tmpUV;
-        float tmpT;
-        uint32_t tmpIndex;
-        const Object *tmpHitObject = nullptr;
+        IntersecInfo tmpIntersecInfo;
 //        std::cout << "test shadow ray" << std::endl;
-        bool vis = !trace(Phit + Nhit * 1e-4, -LightDir, objects, tmpT, tmpIndex, tmpUV, tmpHitObject);
+        bool vis = !trace(Phit + Nhit * options.bias, -LightDir, objects, tmpIntersecInfo);
+
         float scale = 4;
         float pattern = (fmodf(tex.x * scale, 1) > 0.5) ^ (fmodf(tex.y * scale, 1) > 0.5);
-//        hitColor = vis * hitObject->albedo / M_PI * light->intensity * std::max(0.f, Nhit.dotProduct(-LightDir)) * mix(hitObject->color, hitObject->color * 0.8, pattern);
-        hitColor = hitObject->albedo / M_PI * light->intensity * std::max(0.f, Nhit.dotProduct(-LightDir));
+
+#ifdef NO_LIGHT
+        hitColor =  std::max(0.f, Nhit.dotProduct(-dir)) * mix(hitObject->color, hitObject->color * 0.8, pattern);
+#else
+        hitColor = vis * intersecInfo.hitObject->albedo / M_PI *
+                light->intensity * std::max(0.f, Nhit.dotProduct(-LightDir)) *
+                mix(intersecInfo.hitObject->color, intersecInfo.hitObject->color * 0.8, pattern);
+//        hitColor = vis * hitObject->albedo / M_PI * light->intensity * std::max(0.f, Nhit.dotProduct(-LightDir));
+#endif
 //        hitColor = std::max(0.f, Nhit.dotProduct(-LightDir));
     }
 
@@ -144,9 +149,6 @@ int main(int argc, char **argv) {
 
     gen.seed(0);
 
-    Matrix44f l2w(11.146836, -5.781569, -0.0605886, 0, -1.902827, -3.543982, -11.895445, 0, 5.459804, 10.568624, -4.02205, 0, 0, 0, 0, 1);
-    std::unique_ptr<DistantLight> light = std::unique_ptr<DistantLight>(new DistantLight(l2w));
-
     // setting up options
     Options options;
 #if 1 // control the resolution
@@ -197,21 +199,45 @@ int main(int argc, char **argv) {
     if (mesh != nullptr) objects.push_back(std::unique_ptr<Object>(mesh));
 
 # elif 0// test Smooth Shading
-    options.cameraToWorld[3][2] = 5;
+    options.cameraToWorld[3][2] = 7;
     TriangleMesh *meshBall = generatePolyShphere(1.5, 16);
     if(meshBall != nullptr) objects.push_back(std::unique_ptr<Object>(meshBall));
 
-# else // test plane
-    options.fov = 36.87;
+# elif 1 // test distant light shadow
+    Matrix44f l2w(1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1);
+    std::unique_ptr<DistantLight> light = std::unique_ptr<DistantLight>(new DistantLight(l2w));
+
     options.width = 1024;
     options.height = 747;
-    options.cameraToWorld = Matrix44f(-0.972776, 0, -0.231748, 0, -0.114956, 0.8683, 0.482536, 0, 0.201227, 0.49604, -0.844661, 0, 6.696465, 22.721296, -30.097976, 1);
-    TriangleMesh *meshPlane = loadPolyMeshFromFile("./geometry/plane.geo");
-    if(meshPlane != nullptr) objects.push_back(std::unique_ptr<Object>(meshPlane));
+    options.cameraToWorld = Matrix44f();
+    options.bias = 0.1;
 
-    Vec3f randPos(2, 4, 3);
+    Vec3f randPos(0, 2.5, -15);
     float randRadius = 2;
     objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius)));
+
+
+    Vec3f randPos1(0, -4, -16.5);
+    float randRadius1 = 4;
+    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1)));
+#else // test point light shadow
+
+    Matrix44f l2w(1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1);
+    std::unique_ptr<PointLight> light = std::unique_ptr<PointLight>(new DistantLight(l2w));
+
+    options.width = 1024;
+    options.height = 747;
+    options.cameraToWorld = Matrix44f();
+    options.bias = 0.1;
+
+    Vec3f randPos(0, 2.5, -15);
+    float randRadius = 2;
+    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius)));
+
+
+    Vec3f randPos1(0, -4, -16.5);
+    float randRadius1 = 4;
+    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1)));
 
 # endif
 

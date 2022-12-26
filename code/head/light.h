@@ -29,10 +29,17 @@ public:
 
 class PointLight : Light {
 public:
-    PointLight(const Matrix44f&l2w = Matrix44f(), const Vec3f &c = 1, const float  &i = 1) : Light(l2w) {
+    PointLight(const Matrix44f&l2w = Matrix44f(), const Vec3f &c = 1, const float  &i = 20) : Light(l2w) {
         this->color = c;
         this->intensity = i;
         l2w.multDirMatrix(Vec3f(0), pos);
+    }
+
+    void getDirectionAndIntensity(const Vec3f &Phit, Vec3f &lightDirection, float &lightIntensity) const {
+        lightDirection = Phit - pos;
+        float r2 = lightDirection.norm();
+        lightDirection.normalize();
+        lightIntensity = intensity / (4 * M_PI * r2);
     }
     Vec3f pos;
 };

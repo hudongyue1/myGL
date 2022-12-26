@@ -40,16 +40,6 @@ Vec3f mix(const Vec3f &a, const Vec3f& b, const float &mixValue){
     return a * (1 - mixValue) + b * mixValue;
 }
 
-// options in command
-struct Options {
-    uint32_t width;
-    uint32_t height;
-    Vec3f backgroundColor;
-    float fov;
-    Matrix44f cameraToWorld;
-    float bias;
-};
-
 bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, float &x1) {
     int delta = b * b - 4 * a * c;
     if(delta < 0) return false;
