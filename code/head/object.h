@@ -16,12 +16,18 @@ struct Options {
     float fov = 90;
     Matrix44f cameraToWorld;
     float bias = 1e-4;
+    uint32_t maxDepth = 5;
 };
+
+enum MaterialType {kDiffuse, kReflection, kReflectionAndRefraction};
 
 // the virtual class for supported object
 class Object {
 public:
-    Object(const float &al, const Matrix44f &o2w) : color(dis(gen), dis(gen), dis(gen)), albedo(al), objectToWorld(o2w), worldToObject(o2w.inverse()) {}
+    Object(const float &al, const Matrix44f &o2w, const MaterialType &type, const char *na)
+    : color(dis(gen), dis(gen), dis(gen)),
+    albedo(al), objectToWorld(o2w), worldToObject(o2w.inverse()),
+    materialType(type), name(na) {}
     virtual ~Object() {}
 
     // weather intersect and the distance of hit point
@@ -33,6 +39,7 @@ public:
     Matrix44f objectToWorld, worldToObject;
     float albedo;
     const char *name;
+    MaterialType materialType;
 };
 
 // intersection Info : hitObject, tNear, uv, index

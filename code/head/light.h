@@ -20,7 +20,7 @@ public:
 
 class DistantLight : public Light {
 public:
-    DistantLight(const Matrix44f &l2w = Matrix44f(), const Vec3f &c = 1, const float &i = 15) : Light(l2w) {
+    DistantLight(const Matrix44f &l2w = Matrix44f(), const Vec3f &c = 1, const float &i = 10) : Light(l2w) {
         this->color = c;
         this->intensity = i;
         l2w.multDirMatrix(Vec3f(0, 0, -1), dir);

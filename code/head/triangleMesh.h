@@ -93,7 +93,9 @@ class Triangle : public Object {
 private:
     Vec3f vertex0, vertex1, vertex2;
 public:
-    Triangle(const Vec3f &v0, const Vec3f &v1, const Vec3f &v2, const float &al = 0.18, const Matrix44f &o2w = Matrix44f()) : Object(al, o2w) {
+    Triangle(const Vec3f &v0, const Vec3f &v1, const Vec3f &v2, const float &al = 0.18, const Matrix44f &o2w = Matrix44f(),
+             const MaterialType &materialType = kDiffuse,
+             const char *name = "TriangleMesh") : Object(al, o2w, materialType, name) {
         objectToWorld.multDirMatrix(v0, vertex0);
         objectToWorld.multDirMatrix(v1, vertex1);
         objectToWorld.multDirMatrix(v2, vertex2);
@@ -135,8 +137,10 @@ public:
                  const std::unique_ptr<uint32_t []> &verticesIndex,
                  const std::unique_ptr<Vec3f []> &vertices,
                  std::unique_ptr<Vec3f []> &normals,
-                 std::unique_ptr<Vec2f []> &uv, const float &al = 0.18, const Matrix44f &o2w = Matrix44f()) :
-            numTris(0), Object(al, o2w) {
+                 std::unique_ptr<Vec2f []> &uv, const float &al = 0.18, const Matrix44f &o2w = Matrix44f(),
+                 const MaterialType &materialType = kDiffuse,
+                 const char *name = "TriangleMesh") :
+            numTris(0), Object(al, o2w, materialType, name) {
         uint32_t accumulateIndex = 0, maxVerticesIndex = 0;
 
         // find out the total num of triangles in this mesh

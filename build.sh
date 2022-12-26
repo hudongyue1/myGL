@@ -1,3 +1,7 @@
-projec_tName=$1
+# build
+project_Name=$1
 echo $projec_tName
-c++ -o ./run/${projec_tName:-miniRayTracer} ./code/${projec_tName:-miniRayTracer}.cpp -O3 -std=c++11
+c++ -o ./run/${project_Name:-miniRayTracer} ./code/${project_Name:-miniRayTracer}.cpp -O3 -std=c++11
+
+# run
+./run/${project_Name:-miniRayTracer}

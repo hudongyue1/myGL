@@ -26,6 +26,13 @@
 //#define FACE_NORMAL
 
 /**
+ * compute the direction for reflection
+ */
+Vec3f reflection(const Vec3f &incidentDir, const Vec3f &Nhit) {
+    return incidentDir - 2 * incidentDir.dotProduct(Nhit) * Nhit;
+}
+
+/**
  * Test each object for intersection
  * @param orig
  * @param dir
@@ -63,7 +70,10 @@ bool trace(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique_pt
 Vec3f castRay(const Vec3f &orig, const Vec3f &dir,
               const std::vector<std::unique_ptr<Object>> &objects,
               const std::vector<std::unique_ptr<Light>> &lights,
-              const Options &options) {
+              const Options &options,
+              const uint32_t depth = 0) {
+    if(depth > options.maxDepth) return options.backgroundColor;
+
     Vec3f hitColor = 0;
     IntersecInfo intersecInfo;
 
@@ -73,28 +83,48 @@ Vec3f castRay(const Vec3f &orig, const Vec3f &dir,
         Vec2f Texhit;
         intersecInfo.hitObject->getSurfaceData(Phit, dir, intersecInfo.index, intersecInfo.uv, Nhit, Texhit);
 
+        switch (intersecInfo.hitObject->materialType) {
+            case kDiffuse: {
+                for(uint32_t i=0; i<lights.size(); ++i) {
+                    Vec3f lightDir, lightIntensity;
+                    IntersecInfo tmpIntersectInfo;
+                    lights[i]->getDirectionAndIntensity(Phit, lightDir, lightIntensity, tmpIntersectInfo.tNear);
 
-        for(uint32_t i=0; i<lights.size(); ++i) {
-            Vec3f lightDir, lightIntensity;
-            IntersecInfo tmpIntersecInfo;
-            lights[i]->getDirectionAndIntensity(Phit, lightDir, lightIntensity, tmpIntersecInfo.tNear);
+                    //        std::cout << "test shadow ray" << std::endl;
+                    bool vis = !trace(Phit + Nhit * options.bias, -lightDir, objects, tmpIntersectInfo);
 
-            //        std::cout << "test shadow ray" << std::endl;
-            bool vis = !trace(Phit + Nhit * options.bias, -lightDir, objects, tmpIntersecInfo);
-
-            float scale = 4;
-            float pattern = (fmodf(Texhit.x * scale, 1) > 0.5) ^ (fmodf(Texhit.y * scale, 1) > 0.5);
+                    float scale = 4;
+                    float pattern = (fmodf(Texhit.x * scale, 1) > 0.5) ^ (fmodf(Texhit.y * scale, 1) > 0.5);
 
 #ifdef NO_LIGHT
-            hitColor = hitColor + std::max(0.f, Nhit.dotProduct(-dir)) * mix(hitObject->color, hitObject->color * 0.8, pattern);
+                    hitColor = hitColor + vis * std::max(0.f, Nhit.dotProduct(-dir)) * mix(hitObject->color, hitObject->color * 0.8, pattern);
 #else
-            hitColor = vis * hitColor + lightIntensity * (vis * intersecInfo.hitObject->albedo / M_PI *
-                    std::max(0.f, Nhit.dotProduct(-lightDir)) *
-                    mix(intersecInfo.hitObject->color, intersecInfo.hitObject->color * 0.8, pattern));
+                    hitColor = hitColor + vis * lightIntensity * (intersecInfo.hitObject->albedo / M_PI *
+                                                                  std::max(0.f, Nhit.dotProduct(-lightDir)) *
+                                                                  mix(intersecInfo.hitObject->color, intersecInfo.hitObject->color * 0.8, pattern));
 //        hitColor = vis * hitObject->albedo / M_PI * light->intensity * std::max(0.f, Nhit.dotProduct(-LightDir));
 #endif
 //        hitColor = std::max(0.f, Nhit.dotProduct(-LightDir));
+                }
+                break;
+            }
+
+            case kReflection: {
+                Vec3f lightDir = -reflection(dir, Nhit);
+                IntersecInfo tmpIntersectInfo;
+                hitColor = hitColor + 0.8 * castRay(Phit + Nhit * options.bias, -lightDir, objects, lights, options, depth + 1);
+                break;
+            }
+
+            case kReflectionAndRefraction: {
+
+                break;
+            }
+            default: {
+                std::cout << "exceptional type of material!!!" << std::endl;
+            }
         }
+
     } else hitColor = options.backgroundColor;
 
     return hitColor;
@@ -123,7 +153,7 @@ void render(const Options &options, const std::vector<std::unique_ptr<Object>> &
             Vec3f dir;
             options.cameraToWorld.multDirMatrix(Vec3f(x, y, -1), dir);
             dir.normalize();
-            *(pix++) = castRay(orig, dir, objects, lights, options);
+            *(pix++) = castRay(orig, dir, objects, lights, options, 0);
         }
     }
     auto timeEnd = std::chrono::high_resolution_clock::now();
@@ -205,6 +235,7 @@ int main(int argc, char **argv) {
     TriangleMesh *meshBall = generatePolyShphere(1.5, 16);
     if(meshBall != nullptr) objects.push_back(std::unique_ptr<Object>(meshBall));
 
+    // version 0.3
 # elif 0 // test distant light shadow
     Matrix44f l2w(1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1);
     lights.push_back(std::unique_ptr<Light>(new DistantLight(l2w)));
@@ -221,8 +252,9 @@ int main(int argc, char **argv) {
     Vec3f randPos1(0, -4, -16.5);
     float randRadius1 = 4;
     objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1)));
-#else // test point light shadow
-    lights.push_back(std::unique_ptr<Light>(new PointLight(Matrix44f(), Vec3f(10, 2, 3), 1000)));
+#elif 0 // test point light shadow
+    Matrix44f l2w(2, 0, 0, 0, 0, 1, 0, 0, 0, 10, 0, 0, 0, 0, 0, 1);
+    lights.push_back(std::unique_ptr<Light>(new PointLight(Matrix44f(), Vec3f(5, 2, 3), 500)));
 
     options.width = 1024;
     options.height = 747;
@@ -236,6 +268,52 @@ int main(int argc, char **argv) {
 //    Vec3f randPos1(0, -4, -16.5);
 //    float randRadius1 = 4;
 //    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1)));
+#elif 0 // test several lights
+    Matrix44f l2w(1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1);
+    lights.push_back(std::unique_ptr<Light>(new DistantLight(l2w)));
+
+    Matrix44f l2w1(3, 2, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1);
+    lights.push_back(std::unique_ptr<Light>(new DistantLight(Matrix44f())));
+
+    options.width = 1024;
+    options.height = 747;
+    options.cameraToWorld = Matrix44f();
+    options.bias = 0.1;
+
+
+    Vec3f randPos(0, 3.5, -15);
+    float randRadius = 2;
+    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius, 0.18, Matrix44f(), kDiffuse, "sphere1")));
+
+    Vec3f randPos1(0, -12, -40);
+    float randRadius1 = 25;
+    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1,0.18, Matrix44f(), kDiffuse, "sphere2")));
+
+#else // test reflection
+    Matrix44f l2w(2, 0, 0, 0, 0, 1, 0, 0, 0, 10, 0, 0, 0, 0, 0, 1);
+    lights.push_back(std::unique_ptr<Light>(new DistantLight(Matrix44f(l2w))));
+
+    options.width = 3024;
+    options.height = 1964;
+    options.cameraToWorld = Matrix44f();
+    options.fov = 60;
+    options.bias = 0.25;
+
+    Vec3f randPos(0, 3.5, -15);
+    float randRadius = 2;
+    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius, 0.18, Matrix44f(), kReflection, "sphere1")));
+
+    Vec3f randPos1(0, -20, -30);
+    float randRadius1 = 25;
+    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1,0.18, Matrix44f(), kDiffuse, "sphere2")));
+
+    Vec3f randPos2(-4, 1.5, -12);
+    float randRadius2 = 1;
+    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos2, randRadius2, 0.18, Matrix44f(), kReflection, "sphere3")));
+
+    Vec3f randPos3(4, 1.5, -13);
+    float randRadius3 = 1.5;
+    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos3, randRadius3, 0.18, Matrix44f(), kDiffuse, "sphere4")));
 
 # endif
 
