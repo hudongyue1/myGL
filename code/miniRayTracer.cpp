@@ -14,11 +14,11 @@
 #include <random>
 #include <sstream>
 
-#include "geometry.h"
-#include "light.h"
-#include "specialShape.h"
-#include "triangleMesh.h"
-#include "tools.h"
+#include "head/geometry.h"
+#include "head/light.h"
+#include "head/specialShape.h"
+#include "head/triangleMesh.h"
+#include "head/tools.h"
 
 #if !defined METHOD_GEOMETRY || !defined CULLING || !FACE_NORMAL
 //#define METHOD_GEOMETRY

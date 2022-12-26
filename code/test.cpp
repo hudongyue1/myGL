@@ -10,7 +10,7 @@
 #include <sstream>
 #include <chrono>
 
-#include "geometry.h"
+#include "head/geometry.h"
 
 static const float kInfinity = std::numeric_limits<float>::max();
 static const float kEpsilon = 1e-8;
