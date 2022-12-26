@@ -6,11 +6,13 @@
 #define MYGL_LIGHT_H
 
 #include "geometry.h"
+#include "tools.h"
 
 class Light {
 public:
     Light(const Matrix44f &l2w) : lightToWorld(l2w) {}
     virtual ~Light() {}
+    virtual void getDirectionAndIntensity(const Vec3f &Phit, Vec3f &lightDirection, Vec3f &lightIntensity, float &distance) const = 0;
     Matrix44f lightToWorld;
     Vec3f color;
     float intensity;
@@ -24,22 +26,28 @@ public:
         l2w.multDirMatrix(Vec3f(0, 0, -1), dir);
         dir.normalize();
     }
+    void getDirectionAndIntensity(const Vec3f &Phit, Vec3f &lightDirection, Vec3f &lightIntensity, float &distance) const {
+        lightDirection = dir;
+        lightIntensity = color * intensity;
+        distance = kInfinity;
+    }
     Vec3f dir;
 };
 
-class PointLight : Light {
+class PointLight : public Light {
 public:
-    PointLight(const Matrix44f&l2w = Matrix44f(), const Vec3f &c = 1, const float  &i = 20) : Light(l2w) {
+    PointLight(const Matrix44f&l2w = Matrix44f(), const Vec3f &c = 1, const float  &i = 1000) : Light(l2w) {
         this->color = c;
         this->intensity = i;
         l2w.multDirMatrix(Vec3f(0), pos);
     }
 
-    void getDirectionAndIntensity(const Vec3f &Phit, Vec3f &lightDirection, float &lightIntensity) const {
+    void getDirectionAndIntensity(const Vec3f &Phit, Vec3f &lightDirection, Vec3f &lightIntensity, float &distance) const {
         lightDirection = Phit - pos;
         float r2 = lightDirection.norm();
+        distance = sqrt(r2);
         lightDirection.normalize();
-        lightIntensity = intensity / (4 * M_PI * r2);
+        lightIntensity = color * (intensity / (4 * M_PI * r2));
     }
     Vec3f pos;
 };

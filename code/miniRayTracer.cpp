@@ -62,39 +62,40 @@ bool trace(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique_pt
  */
 Vec3f castRay(const Vec3f &orig, const Vec3f &dir,
               const std::vector<std::unique_ptr<Object>> &objects,
-              const std::unique_ptr<DistantLight> &light,
+              const std::vector<std::unique_ptr<Light>> &lights,
               const Options &options) {
-    Vec3f hitColor = options.backgroundColor;
-//    const Object *hitObject = nullptr;
-//    float t;
+    Vec3f hitColor = 0;
     IntersecInfo intersecInfo;
 
-    uint32_t index = 0;
-    Vec2f uv;
     if(trace(orig, dir, objects, intersecInfo)) {
         Vec3f Phit = orig + dir * intersecInfo.tNear;
         Vec3f Nhit;
-        Vec2f tex;
-        Vec3f LightDir = light->dir;
-        intersecInfo.hitObject->getSurfaceData(Phit, dir, intersecInfo.index, intersecInfo.uv, Nhit, tex);
+        Vec2f Texhit;
+        intersecInfo.hitObject->getSurfaceData(Phit, dir, intersecInfo.index, intersecInfo.uv, Nhit, Texhit);
 
-        IntersecInfo tmpIntersecInfo;
-//        std::cout << "test shadow ray" << std::endl;
-        bool vis = !trace(Phit + Nhit * options.bias, -LightDir, objects, tmpIntersecInfo);
 
-        float scale = 4;
-        float pattern = (fmodf(tex.x * scale, 1) > 0.5) ^ (fmodf(tex.y * scale, 1) > 0.5);
+        for(uint32_t i=0; i<lights.size(); ++i) {
+            Vec3f lightDir, lightIntensity;
+            IntersecInfo tmpIntersecInfo;
+            lights[i]->getDirectionAndIntensity(Phit, lightDir, lightIntensity, tmpIntersecInfo.tNear);
+
+            //        std::cout << "test shadow ray" << std::endl;
+            bool vis = !trace(Phit + Nhit * options.bias, -lightDir, objects, tmpIntersecInfo);
+
+            float scale = 4;
+            float pattern = (fmodf(Texhit.x * scale, 1) > 0.5) ^ (fmodf(Texhit.y * scale, 1) > 0.5);
 
 #ifdef NO_LIGHT
-        hitColor =  std::max(0.f, Nhit.dotProduct(-dir)) * mix(hitObject->color, hitObject->color * 0.8, pattern);
+            hitColor = hitColor + std::max(0.f, Nhit.dotProduct(-dir)) * mix(hitObject->color, hitObject->color * 0.8, pattern);
 #else
-        hitColor = vis * intersecInfo.hitObject->albedo / M_PI *
-                light->intensity * std::max(0.f, Nhit.dotProduct(-LightDir)) *
-                mix(intersecInfo.hitObject->color, intersecInfo.hitObject->color * 0.8, pattern);
+            hitColor = vis * hitColor + lightIntensity * (vis * intersecInfo.hitObject->albedo / M_PI *
+                    std::max(0.f, Nhit.dotProduct(-lightDir)) *
+                    mix(intersecInfo.hitObject->color, intersecInfo.hitObject->color * 0.8, pattern));
 //        hitColor = vis * hitObject->albedo / M_PI * light->intensity * std::max(0.f, Nhit.dotProduct(-LightDir));
 #endif
 //        hitColor = std::max(0.f, Nhit.dotProduct(-LightDir));
-    }
+        }
+    } else hitColor = options.backgroundColor;
 
     return hitColor;
 }
@@ -104,7 +105,7 @@ Vec3f castRay(const Vec3f &orig, const Vec3f &dir,
  * @param options
  * @param objects
  */
-void render(const Options &options, const std::vector<std::unique_ptr<Object>> &objects, const std::unique_ptr<DistantLight> &light) {
+void render(const Options &options, const std::vector<std::unique_ptr<Object>> &objects, const std::vector<std::unique_ptr<Light>> &lights) {
     Vec3f *framebuffer = new Vec3f[options.width * options.height];
     Vec3f *pix = framebuffer;
 
@@ -122,7 +123,7 @@ void render(const Options &options, const std::vector<std::unique_ptr<Object>> &
             Vec3f dir;
             options.cameraToWorld.multDirMatrix(Vec3f(x, y, -1), dir);
             dir.normalize();
-            *(pix++) = castRay(orig, dir, objects, light, options);
+            *(pix++) = castRay(orig, dir, objects, lights, options);
         }
     }
     auto timeEnd = std::chrono::high_resolution_clock::now();
@@ -146,6 +147,7 @@ void render(const Options &options, const std::vector<std::unique_ptr<Object>> &
 
 int main(int argc, char **argv) {
     std::vector<std::unique_ptr<Object>> objects;
+    std::vector<std::unique_ptr<Light>> lights;
 
     gen.seed(0);
 
@@ -203,9 +205,9 @@ int main(int argc, char **argv) {
     TriangleMesh *meshBall = generatePolyShphere(1.5, 16);
     if(meshBall != nullptr) objects.push_back(std::unique_ptr<Object>(meshBall));
 
-# elif 1 // test distant light shadow
+# elif 0 // test distant light shadow
     Matrix44f l2w(1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1);
-    std::unique_ptr<DistantLight> light = std::unique_ptr<DistantLight>(new DistantLight(l2w));
+    lights.push_back(std::unique_ptr<Light>(new DistantLight(l2w)));
 
     options.width = 1024;
     options.height = 747;
@@ -215,33 +217,29 @@ int main(int argc, char **argv) {
     Vec3f randPos(0, 2.5, -15);
     float randRadius = 2;
     objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius)));
-
 
     Vec3f randPos1(0, -4, -16.5);
     float randRadius1 = 4;
     objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1)));
 #else // test point light shadow
-
-    Matrix44f l2w(1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1);
-    std::unique_ptr<PointLight> light = std::unique_ptr<PointLight>(new DistantLight(l2w));
+    lights.push_back(std::unique_ptr<Light>(new PointLight(Matrix44f(), Vec3f(10, 2, 3), 1000)));
 
     options.width = 1024;
     options.height = 747;
     options.cameraToWorld = Matrix44f();
-    options.bias = 0.1;
+    options.bias = 0.15;
 
-    Vec3f randPos(0, 2.5, -15);
-    float randRadius = 2;
-    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius)));
+    Vec3f randPos(0, 1, -4);
+    float randRadius = 1;
+    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius, 0.2)));
 
-
-    Vec3f randPos1(0, -4, -16.5);
-    float randRadius1 = 4;
-    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1)));
+//    Vec3f randPos1(0, -4, -16.5);
+//    float randRadius1 = 4;
+//    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1)));
 
 # endif
 
-    render(options, objects, light);
+    render(options, objects, lights);
 
     return 0;
 }
