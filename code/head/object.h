@@ -19,7 +19,9 @@ struct Options {
     uint32_t maxDepth = 5;
 };
 
-enum MaterialType {kDiffuse, kReflection, kReflectionAndRefraction};
+enum MaterialType { kDiffuse, kReflection, kReflectionAndRefraction };
+
+enum RayType { kPrimaryRay, kShadowRay };
 
 // the virtual class for supported object
 class Object {
@@ -40,6 +42,7 @@ public:
     float albedo;
     const char *name;
     MaterialType materialType;
+    float ior;
 };
 
 // intersection Info : hitObject, tNear, uv, index

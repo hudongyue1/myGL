@@ -8,9 +8,13 @@
 #include "geometry.h"
 #include "object.h"
 #include "tools.h"
+#include <cstdio>
+#include <iostream>
+#include <cstdlib>
 
 bool intersectTriangle(const Vec3f &orig, const Vec3f &dir, const Vec3f &vertex0, const Vec3f &vertex1, const Vec3f &vertex2, float &t, float &u, float &v) {
 #ifdef METHOD_GEOMETRY // geometry solution
+    std::cout << "method geometry" << std::endl;
     Vec3f v0v1 = vertex1 - vertex0;
     Vec3f v0v2 = vertex2 - vertex0;
 
@@ -54,7 +58,7 @@ bool intersectTriangle(const Vec3f &orig, const Vec3f &dir, const Vec3f &vertex0
     u /= denom;
     v /= denom;
 
-    return true;
+    return (t > 0) ? true : false;
 
 #else // MOLLER_TRUMBORE
     Vec3f v0v1 = vertex1 - vertex0;
@@ -69,7 +73,7 @@ bool intersectTriangle(const Vec3f &orig, const Vec3f &dir, const Vec3f &vertex0
 #ifdef CULLING //  det < 0 should be culled
     if(det < kEpsilon) return false;
 #else
-    if(abs(det) < kEpsilon) return false;
+    if(fabs(det) < kEpsilon) return false;
 #endif
     Vec3f T = orig - vertex0;
 
@@ -85,7 +89,7 @@ bool intersectTriangle(const Vec3f &orig, const Vec3f &dir, const Vec3f &vertex0
 
     t = inverseDet * Q.dotProduct(v0v2);
 
-    return true;
+    return (t > 0) ? true : false;
 #endif
 }
 
@@ -93,7 +97,7 @@ class Triangle : public Object {
 private:
     Vec3f vertex0, vertex1, vertex2;
 public:
-    Triangle(const Vec3f &v0, const Vec3f &v1, const Vec3f &v2, const float &al = 0.18, const Matrix44f &o2w = Matrix44f(),
+    Triangle(const Vec3f &v0, const Vec3f &v1, const Vec3f &v2, const Matrix44f &o2w = Matrix44f(), const float &al = 0.18,
              const MaterialType &materialType = kDiffuse,
              const char *name = "TriangleMesh") : Object(al, o2w, materialType, name) {
         objectToWorld.multDirMatrix(v0, vertex0);
@@ -137,7 +141,7 @@ public:
                  const std::unique_ptr<uint32_t []> &verticesIndex,
                  const std::unique_ptr<Vec3f []> &vertices,
                  std::unique_ptr<Vec3f []> &normals,
-                 std::unique_ptr<Vec2f []> &uv, const float &al = 0.18, const Matrix44f &o2w = Matrix44f(),
+                 std::unique_ptr<Vec2f []> &uv, const Matrix44f &o2w = Matrix44f(), const float &al = 0.18,
                  const MaterialType &materialType = kDiffuse,
                  const char *name = "TriangleMesh") :
             numTris(0), Object(al, o2w, materialType, name) {
@@ -208,18 +212,18 @@ public:
     }
 
     void getSurfaceData(const Vec3f &Phit, const Vec3f &dir, const uint32_t &index, const Vec2f &uv, Vec3f &Nhit, Vec2f &tex) const {
-#ifdef FACE_NORMAL
-        // face normal
-        const Vec3f &v0 = P[triangleVerticesIndex[index * 3]];
-        const Vec3f &v1 = P[triangleVerticesIndex[index * 3 + 1]];
-        const Vec3f &v2 = P[triangleVerticesIndex[index * 3 + 2]];
-        Nhit = (v1 - v0).crossProduct(v2 - v0);
-#else
+#ifdef SMOOTH_SHADING
         // vertex normal
         const Vec3f &n0 = N[index * 3];
         const Vec3f &n1 = N[index * 3 + 1];
         const Vec3f &n2 = N[index * 3 + 2];
         Nhit = (1 - uv.x - uv.y) * n0 + uv.x * n1 + uv.y * n2;
+#else
+        // face normal
+        const Vec3f &v0 = P[triangleVerticesIndex[index * 3]];
+        const Vec3f &v1 = P[triangleVerticesIndex[index * 3 + 1]];
+        const Vec3f &v2 = P[triangleVerticesIndex[index * 3 + 2]];
+        Nhit = (v1 - v0).crossProduct(v2 - v0);
 #endif
 
         Nhit.normalize();
@@ -316,7 +320,7 @@ TriangleMesh* generatePolyShphere(float rad, uint32_t divs)
     return new TriangleMesh(npolys, faceIndex, vertsIndex, P, normal, stExpand);
 }
 
-TriangleMesh* loadPolyMeshFromFile(const char *file)
+TriangleMesh* loadPolyMeshFromFile(const char *file, const Matrix44f &objectToWorld = Matrix44f())
 {
     std::ifstream ifs;
     try {
@@ -357,7 +361,7 @@ TriangleMesh* loadPolyMeshFromFile(const char *file)
             ss >> st[i].x >> st[i].y;
         }
 
-        return new TriangleMesh(numFaces, faceIndex, vertsIndex, verts, normals, st);
+        return new TriangleMesh(numFaces, faceIndex, vertsIndex, verts, normals, st, objectToWorld);
     }
     catch (...) {
         ifs.close();

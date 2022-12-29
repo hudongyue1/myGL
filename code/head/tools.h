@@ -40,6 +40,11 @@ Vec3f mix(const Vec3f &a, const Vec3f& b, const float &mixValue){
     return a * (1 - mixValue) + b * mixValue;
 }
 
+inline float modulo(const float &f)
+{
+    return f - std::floor(f);
+}
+
 bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, float &x1) {
     int delta = b * b - 4 * a * c;
     if(delta < 0) return false;

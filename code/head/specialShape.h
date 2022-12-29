@@ -21,7 +21,7 @@ private:
     float radius, radius2;
     Vec3f center;
 public:
-    Sphere(const Vec3f &c, const float &r, const float &al = 0.18, const Matrix44f &o2w = Matrix44f(),
+    Sphere(const Vec3f &c, const float &r, const Matrix44f &o2w = Matrix44f(), const float &al = 0.18,
            const MaterialType &materialType = kReflection,
            const char *name = "Sphere") :
            Object (al, o2w, materialType, name) {
@@ -74,7 +74,7 @@ class Plane : public Object {
 private:
     Vec3f normal;
 public:
-    Plane(const Vec3f &N, const float &al = 0.18, const Matrix44f &o2w = Matrix44f(),
+    Plane(const Vec3f &N, const Matrix44f &o2w = Matrix44f(), const float &al = 0.18,
           const MaterialType &materialType = kReflection,
           const char *name = "Sphere") :
             Object (al, o2w, materialType, name) {
@@ -107,7 +107,7 @@ private:
     Vec3f center;
     float radius, radius2;
 public:
-    Disk(const Vec3f &N, const Vec3f &c, const float &r, const float &al = 0.18, const Matrix44f &o2w = Matrix44f(),
+    Disk(const Vec3f &N, const Vec3f &c, const float &r, const Matrix44f &o2w = Matrix44f(), const float &al = 0.18,
          const MaterialType &materialType = kDiffuse,
          const char *name = "TriangleMesh") :
          normal(N), center(c), radius(r), radius2(r*r),
