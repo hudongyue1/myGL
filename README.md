@@ -31,4 +31,52 @@ Adding the choice for **Flat Shading** and **Smooth Shading**:
         </center></div></td>
 	</tr>
 </table></div>
+3. The ray tracer v0.3, add some effects for direct illumination.
 
+   * Distance light, point light and shadow
+
+   <div><table frame=void>	<!--用了<div>进行封装-->
+   	<tr>
+           <td><div><center>	<!--每个格子内是图片加标题-->
+           	<img src="./resource/shadow1.png"
+                    alt="distanceShadow1"
+                    height="300"/>	<!--高度设置-->
+           	Shadow1	<!--标题1-->
+           </center></div></td>    
+        	<td><div><center>	<!--第二张图片-->
+       		<img src="./resource/shadow2.png"
+                    alt="distanceShadow2"
+                    height="300"/>	
+       		Shadow2
+           </center></div></td>
+   	</tr>
+   </table></div>
+
+   * Several light
+
+     <img src="./resource/severalLight.png" alt="severalLight" style="zoom:50%;" />
+
+   * Reflection
+
+     <img src="./resource/reflection.png" alt="reflection" style="zoom:50%;" />
+
+   * Reflection and refraction
+
+     <div><table frame=void>	<!--用了<div>进行封装-->
+     	<tr>
+             <td><div><center>	<!--每个格子内是图片加标题-->
+             	<img src="./resource/reflectionAndRefractionWithoutSmoothShading.png"
+                      alt="distanceShadow1"
+                      height="300"/>	<!--高度设置-->
+             	Without Smooth Shading	<!--标题1-->
+             </center></div></td>    
+          	<td><div><center>	<!--第二张图片-->
+         		<img src="./resource/reflectionAndRefractionWithSmoothShading.png"
+                      alt="distanceShadow2"
+                      height="300"/>	
+         		With Smooth Shading
+             </center></div></td>
+     	</tr>
+     </table></div>
+
+     

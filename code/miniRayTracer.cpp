@@ -74,13 +74,13 @@ void fresnel(const Vec3f &incidentDir, const Vec3f &Nhit, const float &ior, floa
     float sinRefraction = etaIncident / etaRefraction * sqrtf(std::max(0.f, 1 - cosIncident * cosIncident));
     // Total internal reflection
     if (sinRefraction >= 1) {
-        kr = 1;
+        portionForReflection = 1;
     }
     else {
         float cosRefraction = sqrtf(std::max(0.f, 1 - sinRefraction * sinRefraction));
         float Rs = ((etaRefraction * cosIncident) - (etaIncident * cosRefraction)) / ((etaRefraction * cosIncident) + (etaIncident * cosRefraction));
         float Rp = ((etaIncident * cosIncident) - (etaRefraction * cosRefraction)) / ((etaIncident * cosIncident) + (etaRefraction * cosRefraction));
-        kr = (Rs * Rs + Rp * Rp) / 2;
+        portionForReflection = (Rs * Rs + Rp * Rp) / 2;
     }
 }
 
@@ -327,8 +327,8 @@ int main(int argc, char **argv) {
     float randRadius1 = 4;
     objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1)));
 #elif 0 // test point light shadow
-    Matrix44f l2w(2, 0, 0, 0, 0, 1, 0, 0, 0, 10, 0, 0, 0, 0, 0, 1);
-    lights.push_back(std::unique_ptr<Light>(new PointLight(Matrix44f(), Vec3f(5, 2, 3), 500)));
+    Matrix44f l2w(2, 0, 0, 0, 0, 1, 0, 0, 100, 10, 0, 0, 0, 0, 0, 1);
+    lights.push_back(std::unique_ptr<Light>(new PointLight(Matrix44f(l2w), Vec3f(1, 2, 1), 500)));
 
     options.width = 1024;
     options.height = 747;
@@ -337,12 +337,12 @@ int main(int argc, char **argv) {
 
     Vec3f randPos(0, 1, -4);
     float randRadius = 1;
-    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius, 0.2)));
+    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius, Matrix44f(), 0.2, kDiffuse)));
 
 //    Vec3f randPos1(0, -4, -16.5);
 //    float randRadius1 = 4;
 //    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1)));
-#elif 0 // test several lights
+#elif 1 // test several lights
     Matrix44f l2w(1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1);
     lights.push_back(std::unique_ptr<Light>(new DistantLight(l2w)));
 
@@ -357,11 +357,11 @@ int main(int argc, char **argv) {
 
     Vec3f randPos(0, 3.5, -15);
     float randRadius = 2;
-    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius, 0.18, Matrix44f(), kDiffuse, "sphere1")));
+    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius,  Matrix44f(),0.18, kDiffuse, "sphere1")));
 
     Vec3f randPos1(0, -12, -40);
     float randRadius1 = 25;
-    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1,0.18, Matrix44f(), kDiffuse, "sphere2")));
+    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1, Matrix44f(),0.18, kDiffuse, "sphere2")));
 #elif 1 // simple plane example (patterns)
     options.fov = 36.87;
     options.width = 1024;
