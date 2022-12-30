@@ -1,7 +1,7 @@
 # myGL
 1. The simplest ray tracer is finished in v0.1, and it can be downloaded in https://github.com/hudongyue1/myGL/archive/refs/tags/lesson.zip
   
-  The related post is https://hudongyue.com/2022/12/15/Scratchapixel-Simple-Ray-Tracing/
+  The related post is [Scratchapixel: Simple Ray Tracing | HDY blog](https://hudongyue.com/2022/12/15/Scratchapixel-Simple-Ray-Tracing/)
   
   It can render the image like:
 
@@ -31,7 +31,7 @@ Adding the choice for **Flat Shading** and **Smooth Shading**:
         </center></div></td>
 	</tr>
 </table></div>
-3. The ray tracer v0.3, add some effects for direct illumination.
+3. The ray tracer v0.3, add some effects for direct illumination. The related post is [Scratchapixel: Light and Shading | HDY blog](https://hudongyue.com/2022/12/23/Scratchapixel-Light-and-Shading/)
 
    * Distance light, point light and shadow
 
