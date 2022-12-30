@@ -12,85 +12,87 @@
 #include <iostream>
 #include <cstdlib>
 
-bool intersectTriangle(const Vec3f &orig, const Vec3f &dir, const Vec3f &vertex0, const Vec3f &vertex1, const Vec3f &vertex2, float &t, float &u, float &v) {
-#ifdef METHOD_GEOMETRY // geometry solution
-    std::cout << "method geometry" << std::endl;
-    Vec3f v0v1 = vertex1 - vertex0;
-    Vec3f v0v2 = vertex2 - vertex0;
+bool intersectTriangle(const Vec3f &orig, const Vec3f &dir, const Vec3f &vertex0,
+                       const Vec3f &vertex1, const Vec3f &vertex2, const Options &options,
+                       float &t, float &u, float &v) {
+    if(options.geometrySolution) { /// geometry solution
+        std::cout << "method geometry" << std::endl;
+        Vec3f v0v1 = vertex1 - vertex0;
+        Vec3f v0v2 = vertex2 - vertex0;
 
-    Vec3f normal = v0v1.crossProduct(v0v2);
-    normal.normalize();
+        Vec3f normal = v0v1.crossProduct(v0v2);
+        normal.normalize();
 
-    float denom = normal.dotProduct(normal);
+        float denom = normal.dotProduct(normal);
 
-    // exclude parallel
-    float normalDotRayDirection = normal.dotProduct(dir);
-    if(abs(normalDotRayDirection) < kEpsilon)
-        return false;
+        // exclude parallel
+        float normalDotRayDirection = normal.dotProduct(dir);
+        if(abs(normalDotRayDirection) < kEpsilon)
+            return false;
 
-    // compute t for intersection
-    float D = -(normal.dotProduct(vertex0));
-    t = -(normal.dotProduct(orig) + D) / normalDotRayDirection;
+        // compute t for intersection
+        float D = -(normal.dotProduct(vertex0));
+        t = -(normal.dotProduct(orig) + D) / normalDotRayDirection;
 
-    // exclue t < 0, intersection behind the origin of the ray
-    if(t < 0) return false;
+        // exclue t < 0, intersection behind the origin of the ray
+        if(t < 0) return false;
 
-    // get the hit point
-    Vec3f Phit = orig + t*dir;
+        // get the hit point
+        Vec3f Phit = orig + t*dir;
 
-    Vec3f v0P = Phit - vertex0;
-    Vec3f v1P = Phit - vertex1;
-    Vec3f v2P = Phit - vertex2;
+        Vec3f v0P = Phit - vertex0;
+        Vec3f v1P = Phit - vertex1;
+        Vec3f v2P = Phit - vertex2;
 
-    // judge hit point inside triangle or not
-    Vec3f J;
-    J = v0v1.crossProduct(v0P);
-    if(normal.dotProduct(J) < 0) return false;
+        // judge hit point inside triangle or not
+        Vec3f J;
+        J = v0v1.crossProduct(v0P);
+        if(normal.dotProduct(J) < 0) return false;
 
-    Vec3f v1v2 = vertex2 - vertex1;
-    J = v1v2.crossProduct(v1P);
-    if((u = normal.dotProduct(J))< 0) return false;
+        Vec3f v1v2 = vertex2 - vertex1;
+        J = v1v2.crossProduct(v1P);
+        if((u = normal.dotProduct(J))< 0) return false;
 
-    Vec3f v2v0 = vertex0 - vertex2;
-    J = (-v0v2).crossProduct(v2P);
-    if((v = normal.dotProduct(J)) < 0) return false;
+        Vec3f v2v0 = vertex0 - vertex2;
+        J = (-v0v2).crossProduct(v2P);
+        if((v = normal.dotProduct(J)) < 0) return false;
 
-    u /= denom;
-    v /= denom;
+        u /= denom;
+        v /= denom;
 
-    return (t > 0) ? true : false;
+        return (t > 0) ? true : false;
+    } else { /// MOLLER_TRUMBORE
+        Vec3f v0v1 = vertex1 - vertex0;
+        Vec3f v0v2 = vertex2 - vertex0;
+        // v0v1 ✖️ v0v2 -> normal
+        // v0v2 ✖️ v0v1 -> -normal
+        // dir . (v0v1 ✖️ v0v2) = -dir . (v0v2 ✖️ v0v1) = -(dir ✖️ v0v2) . v0v1
+        // P = (dir ✖️ v0v2)
+        Vec3f P = dir.crossProduct(v0v2);
 
-#else // MOLLER_TRUMBORE
-    Vec3f v0v1 = vertex1 - vertex0;
-    Vec3f v0v2 = vertex2 - vertex0;
-    // v0v1 ✖️ v0v2 -> normal
-    // v0v2 ✖️ v0v1 -> -normal
-    // dir . (v0v1 ✖️ v0v2) = -dir . (v0v2 ✖️ v0v1) = -(dir ✖️ v0v2) . v0v1
-    // P = (dir ✖️ v0v2)
-    Vec3f P = dir.crossProduct(v0v2);
+        float det = v0v1.dotProduct(P);
+        if(options.culling) { /// det < 0 should be culled
+            if(det < kEpsilon) return false;
+        } else {
+            if(fabs(det) < kEpsilon) return false;
+        }
 
-    float det = v0v1.dotProduct(P);
-#ifdef CULLING //  det < 0 should be culled
-    if(det < kEpsilon) return false;
-#else
-    if(fabs(det) < kEpsilon) return false;
-#endif
-    Vec3f T = orig - vertex0;
+        Vec3f T = orig - vertex0;
 
-    float inverseDet = 1 / det;
+        float inverseDet = 1 / det;
 
-    u = inverseDet * P.dotProduct(T);
-    if(u < 0) return false;
+        u = inverseDet * P.dotProduct(T);
+        if(u < 0) return false;
 
-    Vec3f Q = T.crossProduct(v0v1);
+        Vec3f Q = T.crossProduct(v0v1);
 
-    v = inverseDet * Q.dotProduct(dir);
-    if(v < 0 || u+v > 1) return false;
+        v = inverseDet * Q.dotProduct(dir);
+        if(v < 0 || u+v > 1) return false;
 
-    t = inverseDet * Q.dotProduct(v0v2);
+        t = inverseDet * Q.dotProduct(v0v2);
 
-    return (t > 0) ? true : false;
-#endif
+        return (t > 0) ? true : false;
+    }
 }
 
 class Triangle : public Object {
@@ -105,9 +107,9 @@ public:
         objectToWorld.multDirMatrix(v2, vertex2);
     }
 
-    bool intersect(const Vec3f &orig, const Vec3f &dir, float &t, uint32_t &index, Vec2f &uv) const {
+    bool intersect(const Vec3f &orig, const Vec3f &dir, const Options &options, float &t, uint32_t &index, Vec2f &uv) const {
         float u, v;
-        if(intersectTriangle(orig, dir, vertex0, vertex1, vertex2, t, u, v)) {
+        if(intersectTriangle(orig, dir, vertex0, vertex1, vertex2, options, t, u, v)) {
             uv.x = u;
             uv.y = v;
             return true;
@@ -115,7 +117,7 @@ public:
         return false;
     }
 
-    void getSurfaceData(const Vec3f &Phit, const Vec3f &dir, const uint32_t &index, const Vec2f &uv, Vec3f &Nhit, Vec2f &tex) const {
+    void getSurfaceData(const Vec3f &Phit, const Vec3f &dir, const uint32_t &index, const Vec2f &uv, const Options &options, Vec3f &Nhit, Vec2f &tex) const {
         Vec3f v0v1 = vertex1 - vertex0;
         Vec3f v0v2 = vertex2 - vertex0;
 
@@ -191,7 +193,7 @@ public:
 
     }
 
-    bool intersect(const Vec3f &orig, const Vec3f &dir, float &tNear, uint32_t &index, Vec2f &uv) const {
+    bool intersect(const Vec3f &orig, const Vec3f &dir, const Options &options, float &tNear, uint32_t &index, Vec2f &uv) const {
         uint32_t  j = 0;
         bool isIntersect = false;
         for(uint32_t i=0; i<numTris; ++i) {
@@ -199,7 +201,7 @@ public:
             Vec3f &v1 = P[triangleVerticesIndex[j + 1]];
             Vec3f &v2 = P[triangleVerticesIndex[j + 2]];
             float u, v, t = kInfinity;
-            if(intersectTriangle(orig, dir, v0, v1, v2, t, u, v) && t < tNear) {
+            if(intersectTriangle(orig, dir, v0, v1, v2, options, t, u, v) && t < tNear) {
                 tNear = t;
                 uv.x = u;
                 uv.y = v;
@@ -211,20 +213,18 @@ public:
         return isIntersect;
     }
 
-    void getSurfaceData(const Vec3f &Phit, const Vec3f &dir, const uint32_t &index, const Vec2f &uv, Vec3f &Nhit, Vec2f &tex) const {
-#ifdef SMOOTH_SHADING
-        // vertex normal
-        const Vec3f &n0 = N[index * 3];
-        const Vec3f &n1 = N[index * 3 + 1];
-        const Vec3f &n2 = N[index * 3 + 2];
-        Nhit = (1 - uv.x - uv.y) * n0 + uv.x * n1 + uv.y * n2;
-#else
-        // face normal
-        const Vec3f &v0 = P[triangleVerticesIndex[index * 3]];
-        const Vec3f &v1 = P[triangleVerticesIndex[index * 3 + 1]];
-        const Vec3f &v2 = P[triangleVerticesIndex[index * 3 + 2]];
-        Nhit = (v1 - v0).crossProduct(v2 - v0);
-#endif
+    void getSurfaceData(const Vec3f &Phit, const Vec3f &dir, const uint32_t &index, const Vec2f &uv, const Options &options, Vec3f &Nhit, Vec2f &tex) const {
+        if(options.smoothShading) { /// vertex normal
+            const Vec3f &n0 = N[index * 3];
+            const Vec3f &n1 = N[index * 3 + 1];
+            const Vec3f &n2 = N[index * 3 + 2];
+            Nhit = (1 - uv.x - uv.y) * n0 + uv.x * n1 + uv.y * n2;
+        } else { /// face normal
+            const Vec3f &v0 = P[triangleVerticesIndex[index * 3]];
+            const Vec3f &v1 = P[triangleVerticesIndex[index * 3 + 1]];
+            const Vec3f &v2 = P[triangleVerticesIndex[index * 3 + 2]];
+            Nhit = (v1 - v0).crossProduct(v2 - v0);
+        }
 
         Nhit.normalize();
 

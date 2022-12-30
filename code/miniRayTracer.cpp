@@ -20,12 +20,6 @@
 #include "head/triangleMesh.h"
 #include "head/tools.h"
 
-#if !defined METHOD_GEOMETRY || !defined CULLING || !FACE_NORMAL || !SMOOTH_SHADING
-//#define SMOOTH_SHADING
-//#define METHOD_GEOMETRY
-//#define CULLING
-//#define FACE_NORMAL
-
 /**
  * compute the direction for reflection
  */
@@ -93,14 +87,14 @@ void fresnel(const Vec3f &incidentDir, const Vec3f &Nhit, const float &ior, floa
  * @param hitObject
  * @return
  */
-bool trace(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique_ptr<Object>> &objects, IntersecInfo &intersecInfo, const RayType &rayType = kPrimaryRay) {
+bool trace(const Vec3f &orig, const Vec3f &dir, const std::vector<std::unique_ptr<Object>> &objects, IntersecInfo &intersecInfo, const Options &options, const RayType &rayType = kPrimaryRay) {
     std::vector<std::unique_ptr<Object>>::const_iterator iter = objects.begin();
     for(; iter != objects.end(); ++iter) {
         float t = kInfinity;
         uint32_t indexForFace;
         Vec2f uvForFace;
 
-        if((*iter)->intersect(orig, dir, t, indexForFace, uvForFace) && t < intersecInfo.tNear) {
+        if((*iter)->intersect(orig, dir, options,t, indexForFace, uvForFace) && t < intersecInfo.tNear) {
 //            std::cout << "intersect with something" << std::endl;
             if(rayType == kShadowRay && (*iter)->materialType == kReflectionAndRefraction) continue;
             intersecInfo.hitObject = iter->get();
@@ -130,11 +124,11 @@ Vec3f castRay(const Vec3f &orig, const Vec3f &dir,
     Vec3f hitColor = 0;
     IntersecInfo intersecInfo;
 
-    if(trace(orig, dir, objects, intersecInfo)) {
+    if(trace(orig, dir, objects, intersecInfo, options)) {
         Vec3f Phit = orig + dir * intersecInfo.tNear;
         Vec3f Nhit;
         Vec2f Texhit;
-        intersecInfo.hitObject->getSurfaceData(Phit, dir, intersecInfo.index, intersecInfo.uv, Nhit, Texhit);
+        intersecInfo.hitObject->getSurfaceData(Phit, dir, intersecInfo.index, intersecInfo.uv, options, Nhit, Texhit);
 
         // no lights
         if(lights.size() == 0) {
@@ -151,7 +145,7 @@ Vec3f castRay(const Vec3f &orig, const Vec3f &dir,
                     IntersecInfo tmpIntersectInfo;
                     lights[i]->getDirectionAndIntensity(Phit, lightDir, lightIntensity, tmpIntersectInfo.tNear);
                     // compute shadow
-                    bool vis = !trace(Phit + Nhit * options.bias, -lightDir, objects, tmpIntersectInfo, kShadowRay);
+                    bool vis = !trace(Phit + Nhit * options.bias, -lightDir, objects, tmpIntersectInfo, options, kShadowRay);
 
                     float scale = 4;
                     float pattern = (fmodf(Texhit.x * scale, 1) > 0.5) ^ (fmodf(Texhit.y * scale, 1) > 0.5);
@@ -267,7 +261,7 @@ int main(int argc, char **argv) {
     options.fov = 51.52;
     options.bias = 1e-4;
 
-#if 0 // version 0.1
+#if 0 /// version 0.1
     options.cameraToWorld = Matrix44f(0.945519, 0, -0.325569, 0, -0.179534, 0.834209, -0.521403, 0, 0.271593, 0.551447, 0.78876, 0, 4.208271, 8.374532, 17.932925, 1);
     options.bias = 10;
 
@@ -296,7 +290,7 @@ int main(int argc, char **argv) {
     float radius2 = 2;
     objects.push_back(std::unique_ptr<Object>(new Disk(normal2, center2, radius2)));
 
-#elif 0 // version 0.2
+#elif 0 /// version 0.2
 
     Matrix44f tmp = Matrix44f(0.707107, -0.331295, 0.624695, 0, 0, 0.883452, 0.468521, 0, -0.707107, -0.331295, 0.624695, 0, -1.63871, -5.747777, -40.400412, 1);
     options.cameraToWorld = tmp.inverse();
@@ -309,8 +303,9 @@ int main(int argc, char **argv) {
     TriangleMesh *meshBall = generatePolyShphere(1.5, 16);
     if(meshBall != nullptr) objects.push_back(std::unique_ptr<Object>(meshBall));
 
-    // version 0.3
-# elif 0 // test distant light shadow
+
+# elif 0 /// version 0.3
+// test distant light shadow
     Matrix44f l2w(1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1);
     lights.push_back(std::unique_ptr<Light>(new DistantLight(l2w)));
 
@@ -338,11 +333,7 @@ int main(int argc, char **argv) {
     Vec3f randPos(0, 1, -4);
     float randRadius = 1;
     objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius, Matrix44f(), 0.2, kDiffuse)));
-
-//    Vec3f randPos1(0, -4, -16.5);
-//    float randRadius1 = 4;
-//    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1)));
-#elif 1 // test several lights
+#elif 0 // test several lights
     Matrix44f l2w(1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1);
     lights.push_back(std::unique_ptr<Light>(new DistantLight(l2w)));
 
@@ -362,7 +353,7 @@ int main(int argc, char **argv) {
     Vec3f randPos1(0, -12, -40);
     float randRadius1 = 25;
     objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1, Matrix44f(),0.18, kDiffuse, "sphere2")));
-#elif 1 // simple plane example (patterns)
+#elif 0 // simple plane example (patterns)
     options.fov = 36.87;
     options.width = 1024;
     options.height = 747;
@@ -398,9 +389,7 @@ int main(int argc, char **argv) {
     Matrix44f l2w(0.95292, 0.289503, 0.0901785, 0, -0.0960954, 0.5704, -0.815727, 0, -0.287593, 0.768656, 0.571365, 0, 0, 0, 0, 1);
     lights.push_back(std::unique_ptr<Light>(new DistantLight(l2w, 1, 15)));
 
-#elif 0
-    // glass and pen example
-    // setting up options
+#elif 1 // glass and pen example / reflection and refraction
     options.fov = 36.87;
     options.maxDepth = 10;
     options.width = 1024;
@@ -427,17 +416,6 @@ int main(int argc, char **argv) {
         objects.push_back(std::unique_ptr<Object>(mesh4));
     }
 
-    Matrix44f xform1;
-    xform1[3][0] = -1.2;
-    xform1[3][1] = 6;
-    xform1[3][2] = -3;
-    Sphere *sph1 = new Sphere(0, 5, xform1);
-    if(sph1 != nullptr) {
-        sph1->materialType = kReflectionAndRefraction;
-        sph1->ior = 1.7;
-        objects.push_back(std::unique_ptr<Object>(sph1));
-    }
-
     Matrix44f l2w(11.146836, -5.781569, -0.0605886, 0, -1.902827, -3.543982, -11.895445, 0, 5.459804, 10.568624, -4.02205, 0, 0, 0, 0, 1);
     lights.push_back(std::unique_ptr<Light>(new DistantLight(l2w, 1, 20)));
 
@@ -447,5 +425,3 @@ int main(int argc, char **argv) {
 
     return 0;
 }
-
-#endif
