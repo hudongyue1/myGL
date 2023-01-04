@@ -102,9 +102,9 @@ public:
     Triangle(const Vec3f &v0, const Vec3f &v1, const Vec3f &v2, const Matrix44f &o2w = Matrix44f(), const float &al = 0.18,
              const MaterialType &materialType = kDiffuse,
              const char *name = "TriangleMesh") : Object(al, o2w, materialType, name) {
-        objectToWorld.multDirMatrix(v0, vertex0);
-        objectToWorld.multDirMatrix(v1, vertex1);
-        objectToWorld.multDirMatrix(v2, vertex2);
+        objectToWorld.multVecMatrix(v0, vertex0);
+        objectToWorld.multVecMatrix(v1, vertex1);
+        objectToWorld.multVecMatrix(v2, vertex2);
     }
 
     bool intersect(const Vec3f &orig, const Vec3f &dir, const Options &options, float &t, uint32_t &index, Vec2f &uv) const {
@@ -164,7 +164,7 @@ public:
         // allocate memory to store this vertices
         P = std::unique_ptr<Vec3f []>(new Vec3f[maxVerticesIndex]);
         for(uint32_t i=0; i<maxVerticesIndex; ++i) {
-            objectToWorld.multDirMatrix(vertices[i], P[i]);
+            objectToWorld.multVecMatrix(vertices[i], P[i]);
         }
 
         // used to transform normals
@@ -236,7 +236,7 @@ public:
     }
 };
 
-TriangleMesh* generatePolyShphere(float rad, uint32_t divs)
+TriangleMesh* generatePolyShphere(float rad, uint32_t divs, Matrix44f &o2w)
 {
     // generate points
     uint32_t numVertices = (divs - 1) * divs + 2;
@@ -317,7 +317,7 @@ TriangleMesh* generatePolyShphere(float rad, uint32_t divs)
     }
 
 //    return new TriangleMesh(npolys, faceIndex, vertsIndex, P, N, st);
-    return new TriangleMesh(npolys, faceIndex, vertsIndex, P, normal, stExpand);
+    return new TriangleMesh(npolys, faceIndex, vertsIndex, P, normal, stExpand, o2w);
 }
 
 TriangleMesh* loadPolyMeshFromFile(const char *file, const Matrix44f &objectToWorld = Matrix44f())

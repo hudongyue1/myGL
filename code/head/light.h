@@ -39,7 +39,7 @@ public:
     PointLight(const Matrix44f&l2w = Matrix44f(), const Vec3f &c = 1, const float  &i = 1000) : Light(l2w) {
         this->color = c;
         this->intensity = i;
-        l2w.multDirMatrix(Vec3f(0), pos);
+        l2w.multVecMatrix(Vec3f(0), pos);
     }
 
     void getDirectionAndIntensity(const Vec3f &Phit, Vec3f &lightDirection, Vec3f &lightIntensity, float &distance) const {

@@ -56,6 +56,7 @@ bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, f
         x0 = q / a;
         x1 = c / q;
     }
+    if(x0 > x1) std::swap(x0, x1);
     return true;
 }
 
