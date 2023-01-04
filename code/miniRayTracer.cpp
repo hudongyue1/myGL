@@ -258,12 +258,11 @@ int main(int argc, char **argv) {
     options.height = 1600;
 #endif
     options.backgroundColor = kDefaultBackgroundColor;
-    options.fov = 51.52;
     options.bias = 1e-4;
+    options.fov = 51.52;
 
 #if 0 /// version 0.1
-    options.cameraToWorld = Matrix44f(0.945519, 0, -0.325569, 0, -0.179534, 0.834209, -0.521403, 0, 0.271593, 0.551447, 0.78876, 0, 4.208271, 8.374532, 17.932925, 1);
-    options.bias = 10;
+    options.cameraToWorld = Matrix44f(0.945519, 0, -0.325569, 0, -0.179534, 0.834209, -0.521403, 0, 0.271593, 0.551447, 0.78876, 0, 5.208271, 8.374532, 17.932925, 1);
 
     uint32_t numSpheres = 3;
     // sphere
@@ -279,28 +278,32 @@ int main(int argc, char **argv) {
     Vec3f v2((0.5 - dis(gen)) * 10, 0.5 * 10, (3 + dis(gen) * 10));
     objects.push_back(std::unique_ptr<Object>(new Triangle(v0, v1, v2)));
 
-    // disk
-    Vec3f normal1(0.2, 0.5 * 10, (1 + dis(gen) * 10));
-    Vec3f center1(0.2, 0.5 * 8, 0.1 );
-    float radius1 = 2;
-    objects.push_back(std::unique_ptr<Object>(new Disk(normal1, center1, radius1)));
-
-    Vec3f normal2(0.2, 0.5 * 10, 0);
-    Vec3f center2(0, 0.5 * 8, 0.1 );
-    float radius2 = 2;
-    objects.push_back(std::unique_ptr<Object>(new Disk(normal2, center2, radius2)));
+//    // disk
+//    Vec3f normal1(0.2, 0.5 * 10, (1 + dis(gen) * 10));
+//    Vec3f center1(0.2, 0.5 * 8, 0.1 );
+//    float radius1 = 2;
+//    objects.push_back(std::unique_ptr<Object>(new Disk(normal1, center1, radius1)));
+//
+//    Vec3f normal2(0.2, 0.5 * 10, 0);
+//    Vec3f center2(0, 0.5 * 8, 0.1 );
+//    float radius2 = 2;
+//    objects.push_back(std::unique_ptr<Object>(new Disk(normal2, center2, radius2)));
 
 #elif 0 /// version 0.2
 
-    Matrix44f tmp = Matrix44f(0.707107, -0.331295, 0.624695, 0, 0, 0.883452, 0.468521, 0, -0.707107, -0.331295, 0.624695, 0, -1.63871, -5.747777, -40.400412, 1);
+    Matrix44f tmp = Matrix44f(0.707107, -0.331295, 0.624695, 0, 0, 0.883452, 0.468521, 0, -0.707107, -0.331295, 0.624695, 0, 0.63871, -5.747777, -25.400412, 1);
     options.cameraToWorld = tmp.inverse();
 
-    TriangleMesh *mesh = loadPolyMeshFromFile("./geometry/cow.geo");
+
+    Matrix44f o2w(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+    TriangleMesh *mesh = loadPolyMeshFromFile("./geometry/cow.geo", o2w);
     if (mesh != nullptr) objects.push_back(std::unique_ptr<Object>(mesh));
 
-# elif 0// test Smooth Shading
+# elif 0 // test Smooth Shading
     options.cameraToWorld[3][2] = 7;
-    TriangleMesh *meshBall = generatePolyShphere(1.5, 16);
+//    options.smoothShading = false;
+    Matrix44f o2w(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+    TriangleMesh *meshBall = generatePolyShphere(1.5, 16, o2w);
     if(meshBall != nullptr) objects.push_back(std::unique_ptr<Object>(meshBall));
 
 
@@ -312,60 +315,89 @@ int main(int argc, char **argv) {
     options.width = 1024;
     options.height = 747;
     options.cameraToWorld = Matrix44f();
-    options.bias = 0.1;
+    options.bias = 2;
 
     Vec3f randPos(0, 2.5, -15);
     float randRadius = 2;
-    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius)));
+    Sphere *sphere = new Sphere(randPos, randRadius);
+    if(sphere != nullptr) {
+        sphere->materialType = kDiffuse;
+        objects.push_back(std::unique_ptr<Object>(sphere));
+    }
 
     Vec3f randPos1(0, -4, -16.5);
     float randRadius1 = 4;
-    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1)));
+    Sphere *sphere1 = new Sphere(randPos1, randRadius1);
+    if(sphere1 != nullptr) {
+        sphere1->materialType = kDiffuse;
+        objects.push_back(std::unique_ptr<Object>(sphere1));
+    }
+
 #elif 0 // test point light shadow
-    Matrix44f l2w(2, 0, 0, 0, 0, 1, 0, 0, 100, 10, 0, 0, 0, 0, 0, 1);
-    lights.push_back(std::unique_ptr<Light>(new PointLight(Matrix44f(l2w), Vec3f(1, 2, 1), 500)));
-
-    options.width = 1024;
-    options.height = 747;
-    options.cameraToWorld = Matrix44f();
-    options.bias = 0.15;
-
-    Vec3f randPos(0, 1, -4);
-    float randRadius = 1;
-    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius, Matrix44f(), 0.2, kDiffuse)));
-#elif 0 // test several lights
-    Matrix44f l2w(1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1);
-    lights.push_back(std::unique_ptr<Light>(new DistantLight(l2w)));
-
-    Matrix44f l2w1(3, 2, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1);
-    lights.push_back(std::unique_ptr<Light>(new DistantLight(Matrix44f())));
+    Matrix44f l2w(2, 0, 0, 0, 0, 1, 0, 0, 100, 10, 0, 0, 0, 0, -4, 1);
+    lights.push_back(std::unique_ptr<Light>(new PointLight(Matrix44f(l2w), Vec3f(1, 1, 1), 5000)));
 
     options.width = 1024;
     options.height = 747;
     options.cameraToWorld = Matrix44f();
     options.bias = 0.1;
 
+    Vec3f randPos(0, 0, -15);
+    float randRadius = 7;
+    Sphere *sphere = new Sphere(randPos, randRadius);
+    if(sphere != nullptr) {
+        sphere->materialType = kDiffuse;
+        objects.push_back(std::unique_ptr<Object>(sphere));
+    }
 
-    Vec3f randPos(0, 3.5, -15);
-    float randRadius = 2;
-    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos, randRadius,  Matrix44f(),0.18, kDiffuse, "sphere1")));
+#elif 0 // test several lights
+    options.fov = 36.87;
+    options.cameraToWorld = Matrix44f(0.707107, 0, -0.707107, 0, -0.331295, 0.883452, -0.331295, 0, 0.624695, 0.468521, 0.624695, 0, 18, 10, 10, 1);
+    options.width = 1024;
+    options.height = 747;
 
-    Vec3f randPos1(0, -12, -40);
-    float randRadius1 = 25;
-    objects.push_back(std::unique_ptr<Object>(new Sphere(randPos1, randRadius1, Matrix44f(),0.18, kDiffuse, "sphere2")));
+    Matrix44f l2w(1, 0, 0, 0, 0, 1, 1, 0, 0, 8, -1, 0, 0, 0, 0, 1);
+    lights.push_back(std::unique_ptr<Light>(new DistantLight(l2w)));
+
+    Matrix44f l2w1(1, 0, 0, 0, 0, 1, 1, 0, -1, 3, 0, 0, 0, 0, 0, 1);
+    lights.push_back(std::unique_ptr<Light>(new DistantLight(l2w1, Vec3f(1), 15)));
+
+    Matrix44f o2w2(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 8, 4, -4, 1);
+    TriangleMesh *meshBall = generatePolyShphere(2, 16, o2w2);
+    if(meshBall != nullptr) {
+        meshBall->name = "sphere";
+        objects.push_back(std::unique_ptr<Object>(meshBall));
+    }
+
+    Matrix44f o2w1(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 0, -4, 1);
+    TriangleMesh *mesh = loadPolyMeshFromFile("./geometry/plane.geo", o2w1);
+    if (mesh != nullptr) {
+        // mesh->smoothShading = false;
+        objects.push_back(std::unique_ptr<Object>(mesh));
+    }
 #elif 0 // simple plane example (patterns)
     options.fov = 36.87;
     options.width = 1024;
     options.height = 747;
     options.cameraToWorld = Matrix44f(0.707107, 0, -0.707107, 0, -0.331295, 0.883452, -0.331295, 0, 0.624695, 0.468521, 0.624695, 0, 28, 21, 28, 1);
+    options.bias = 0.1;
 
     TriangleMesh *mesh = loadPolyMeshFromFile("./geometry/plane.geo");
     if (mesh != nullptr) {
         // mesh->smoothShading = false;
         objects.push_back(std::unique_ptr<Object>(mesh));
     }
+
+    Vec3f randPos(-2, 2, -9);
+    float randRadius = 2.5;
+    Sphere *sphere = new Sphere(randPos, randRadius);
+    if(sphere != nullptr) {
+        sphere->materialType = kDiffuse;
+        objects.push_back(std::unique_ptr<Object>(sphere));
+    }
+
     Matrix44f l2w(11.146836, -5.781569, -0.0605886, 0, -1.902827, -3.543982, -11.895445, 0, 5.459804, 10.568624, -4.02205, 0, 0, 0, 0, 1);
-    lights.push_back(std::unique_ptr<Light>(new DistantLight(l2w, 1, 1000)));
+    lights.push_back(std::unique_ptr<Light>(new PointLight(l2w, 1, 1000)));
 #elif 0 // multiple glasses example
     options.fov = 36.87;
     options.width = 1024;
