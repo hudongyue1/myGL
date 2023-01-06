@@ -46,7 +46,7 @@ inline float modulo(const float &f)
 }
 
 bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, float &x1) {
-    int delta = b * b - 4 * a * c;
+    float delta = b * b - 4 * a * c;
     if(delta < 0) return false;
     else if(delta == 0) { x0 = x1 = -0.5 * b / a; }
     else {
