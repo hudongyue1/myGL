@@ -132,9 +132,7 @@ Vec3f castRay(const Vec3f &orig, const Vec3f &dir,
 
         // no lights
         if(lights.size() == 0) {
-            float scale = 4;
-            float pattern = (fmodf(Texhit.x * scale, 1) > 0.5) ^ (fmodf(Texhit.y * scale, 1) > 0.5);
-            hitColor = hitColor + std::max(0.f, Nhit.dotProduct(-dir)) * mix(intersecInfo.hitObject->color, intersecInfo.hitObject->color * 0.8, pattern);
+            hitColor = hitColor + std::max(0.f, Nhit.dotProduct(-dir));
             return hitColor;
         }
 
@@ -149,7 +147,7 @@ Vec3f castRay(const Vec3f &orig, const Vec3f &dir,
 
                     float scale = 4;
                     float pattern = (fmodf(Texhit.x * scale, 1) > 0.5) ^ (fmodf(Texhit.y * scale, 1) > 0.5);
-                    hitColor = hitColor + vis * lightIntensity * (intersecInfo.hitObject->albedo / M_PI * std::max(0.f, Nhit.dotProduct(-dir)) *
+                    hitColor = hitColor + vis * lightIntensity * (intersecInfo.hitObject->albedo / M_PI * std::max(0.f, Nhit.dotProduct(-lightDir)) *
                             mix(intersecInfo.hitObject->color, intersecInfo.hitObject->color * 0.8, pattern));
 //                    hitColor = hitColor + vis * lightIntensity * (intersecInfo.hitObject->albedo / M_PI *
 //                                              std::max(0.f, Nhit.dotProduct(-lightDir)));
@@ -159,7 +157,6 @@ Vec3f castRay(const Vec3f &orig, const Vec3f &dir,
 
             case kReflection: {
                 Vec3f lightDir = -reflection(dir, Nhit);
-                IntersecInfo tmpIntersectInfo;
                 hitColor = hitColor + 0.8 * castRay(Phit + Nhit * options.bias, -lightDir, objects, lights, options, depth + 1);
                 break;
             }
@@ -186,6 +183,28 @@ Vec3f castRay(const Vec3f &orig, const Vec3f &dir,
                 hitColor = hitColor + reflectionColor * portionForReflection + refractionColor * (1 - portionForReflection);
                 break;
             }
+
+            case kPhong: {
+                Vec3f diffuse = 0, specular = 0;
+                for(uint32_t i=0; i<lights.size(); ++i) {
+                    Vec3f lightDir, lightIntensity;
+
+                    /// diffuse part
+                    IntersecInfo tmpIntersectInfo;
+                    lights[i]->getDirectionAndIntensity(Phit, lightDir, lightIntensity, tmpIntersectInfo.tNear);
+                    // shadow
+                    bool vis = !trace(Phit + options.bias * Nhit, -lightDir, objects, tmpIntersectInfo, options, kShadowRay);
+                    diffuse = diffuse + vis * intersecInfo.hitObject->albedo / M_PI * lightIntensity * std::max(0.f, Nhit.dotProduct(-lightDir));
+
+                    /// reflect part
+                    lightDir = -reflection(lightDir, Nhit);
+                    specular = specular +  vis * lightIntensity  * std::pow(std::max(0.f, (-lightDir).dotProduct(-dir)), intersecInfo.hitObject->n) ;
+
+                }
+                hitColor = diffuse * intersecInfo.hitObject->kd + specular * intersecInfo.hitObject->ks;
+                break;
+            }
+
             default: {
                 std::cout << "exceptional type of material!!!" << std::endl;
                 break;
@@ -258,7 +277,7 @@ int main(int argc, char **argv) {
     options.height = 1600;
 #endif
     options.backgroundColor = kDefaultBackgroundColor;
-    options.bias = 1e-4;
+    options.bias = 0.0001;
     options.fov = 51.52;
 
 #if 0 /// version 0.1
@@ -315,7 +334,7 @@ int main(int argc, char **argv) {
     options.width = 1024;
     options.height = 747;
     options.cameraToWorld = Matrix44f();
-    options.bias = 2;
+
 
     Vec3f randPos(0, 2.5, -15);
     float randRadius = 2;
@@ -388,7 +407,7 @@ int main(int argc, char **argv) {
         objects.push_back(std::unique_ptr<Object>(mesh));
     }
 
-    Vec3f randPos(-2, 2, -9);
+    Vec3f randPos(-2, 4, -9);
     float randRadius = 2.5;
     Sphere *sphere = new Sphere(randPos, randRadius);
     if(sphere != nullptr) {
@@ -396,8 +415,8 @@ int main(int argc, char **argv) {
         objects.push_back(std::unique_ptr<Object>(sphere));
     }
 
-    Matrix44f l2w(11.146836, -5.781569, -0.0605886, 0, -1.902827, -3.543982, -11.895445, 0, 5.459804, 10.568624, -4.02205, 0, 0, 0, 0, 1);
-    lights.push_back(std::unique_ptr<Light>(new PointLight(l2w, 1, 1000)));
+    Matrix44f l2w(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -3, 4, -3, 1);
+    lights.push_back(std::unique_ptr<Light>(new PointLight(l2w, 1, 10000)));
 #elif 0 // multiple glasses example
     options.fov = 36.87;
     options.width = 1024;
@@ -421,7 +440,7 @@ int main(int argc, char **argv) {
     Matrix44f l2w(0.95292, 0.289503, 0.0901785, 0, -0.0960954, 0.5704, -0.815727, 0, -0.287593, 0.768656, 0.571365, 0, 0, 0, 0, 1);
     lights.push_back(std::unique_ptr<Light>(new DistantLight(l2w, 1, 15)));
 
-#elif 1 // glass and pen example / reflection and refraction
+#elif 0 // glass and pen example / reflection and refraction
     options.fov = 36.87;
     options.maxDepth = 10;
     options.width = 1024;
@@ -450,6 +469,38 @@ int main(int argc, char **argv) {
 
     Matrix44f l2w(11.146836, -5.781569, -0.0605886, 0, -1.902827, -3.543982, -11.895445, 0, 5.459804, 10.568624, -4.02205, 0, 0, 0, 0, 1);
     lights.push_back(std::unique_ptr<Light>(new DistantLight(l2w, 1, 20)));
+
+#elif 1 // Phong model
+    options.fov = 36.87;
+    options.width = 1024;
+    options.height = 747;
+    options.cameraToWorld[3][2] = 12;
+    options.cameraToWorld[3][1] = 1;
+
+    Matrix44f xform;
+    xform[0][0] = 1;
+    xform[1][1] = 1;
+    xform[2][2] = 1;
+    TriangleMesh *mesh = loadPolyMeshFromFile("./geometry/plane.geo", xform);
+    if (mesh != nullptr) {
+        mesh->materialType = kPhong;
+        objects.push_back(std::unique_ptr<Object>(mesh));
+    }
+
+    float w[5] = {0.04, 0.08, 0.1, 0.15, 0.2};
+    for (int i = -4, n = 2, k = 0; i <= 4; i+= 2, n *= 5, k++) {
+        Matrix44f xformSphere;
+        xformSphere[3][0] = i;
+        xformSphere[3][1] = 1;
+        Sphere *sph = new Sphere(Vec3f(0), 0.9, xformSphere);
+        sph->materialType = kPhong;
+        sph->n = n;
+        sph->ks = w[k];
+        objects.push_back(std::unique_ptr<Object>(sph));
+    }
+
+    Matrix44f l2w(11.146836, -5.781569, -0.0605886, 0, -1.902827, -3.543982, -11.895445, 0, 5.459804, 10.568624, -4.02205, 0, 0, 0, 0, 1);
+    lights.push_back(std::unique_ptr<Light>(new DistantLight(l2w, 1, 10)));
 
 # endif
 

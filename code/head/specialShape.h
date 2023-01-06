@@ -26,7 +26,7 @@ public:
            Object (al, o2w, materialType, name) {
         radius = r;
         radius2 = r * r;
-        objectToWorld.multVecMatrix(c, center);
+        o2w.multVecMatrix(c, center);
     }
 
     bool intersect(const Vec3f &orig, const Vec3f &dir, const Options &options, float &t, uint32_t &index, Vec2f &uv) const {

@@ -16,7 +16,6 @@ bool intersectTriangle(const Vec3f &orig, const Vec3f &dir, const Vec3f &vertex0
                        const Vec3f &vertex1, const Vec3f &vertex2, const Options &options,
                        float &t, float &u, float &v) {
     if(options.geometrySolution) { /// geometry solution
-        std::cout << "method geometry" << std::endl;
         Vec3f v0v1 = vertex1 - vertex0;
         Vec3f v0v2 = vertex2 - vertex0;
 

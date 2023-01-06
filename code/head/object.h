@@ -15,14 +15,14 @@ struct Options {
     Vec3f backgroundColor = kDefaultBackgroundColor;
     float fov = 90;
     Matrix44f cameraToWorld;
-    float bias = 1e-4;
+    float bias = 0.0001;
     uint32_t maxDepth = 5;
     bool geometrySolution = false;
     bool culling = false;
     bool smoothShading = true;
 };
 
-enum MaterialType { kDiffuse, kReflection, kReflectionAndRefraction };
+enum MaterialType { kDiffuse, kReflection, kReflectionAndRefraction, kPhong };
 
 enum RayType { kPrimaryRay, kShadowRay };
 
@@ -42,10 +42,13 @@ public:
     virtual void getSurfaceData(const Vec3f &Phit, const Vec3f &dir, const uint32_t &index, const Vec2f &uv, const Options &options, Vec3f &Nhit, Vec2f &tex) const = 0;
     Vec3f color;
     Matrix44f objectToWorld, worldToObject;
-    float albedo;
+    float albedo = 0.18;
     const char *name;
     MaterialType materialType;
-    float ior;
+    float ior; // for refraction
+    float kd = 0.8; // for kPhong model: diffuse weight
+    float ks = 0.2; // for kPhong model: specular weight
+    float n = 10; // for kPhong model: exponent
 };
 
 // intersection Info : hitObject, tNear, uv, index
