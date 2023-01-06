@@ -40,3 +40,8 @@
 /run
 
 /.idea
+
+/cmake-build-debug
+
+CMakeLists.txt
+/code/test.cpp
