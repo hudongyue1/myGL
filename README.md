@@ -9,7 +9,7 @@
 
 2. The ray tracer v0.2, and it can support to render the triangle mesh. It can be downloaded in https://github.com/hudongyue1/myGL/releases/tag/lesson1
   
-  With a mesh model, it can triangulate it at first, then it can render it like:
+  With a mesh model, we can triangulate it at first, then render it like:
 
   ![v0.2](./resource/v0.2.png)
 
